@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>odrive_can_bridge</name>
+  <version>0.2.0</version>
+  <description>ODrive V3.6 CAN bus to ROS 2 bridge node. Subscribes to /wheel_cmd and sends to CAN; subscribes to ODrive heartbeat and publishes /wheel_state, /wheel_odom, and diagnostic information.</description>
+  <maintainer email="you@example.com">Rover Developer</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>can_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>tf2_ros</depend>
+
+  <!-- 依赖的 Python 库 -->
+  <exec_depend>python-can</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

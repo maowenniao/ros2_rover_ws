@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ROS 2
+install/
+log/
+ws_install/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 大型文件
+*.step
+*.stp
+*.iges
+*.igs
+*.obj
+*.stl
+
+# 压缩包
+*.zip
+*.tar.gz
+*.7z
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# ODrive 相关文件
+odrivelist.txt
+odrive_logs/

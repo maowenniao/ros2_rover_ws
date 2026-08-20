@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rover_mission</name>
+  <version>0.1.0</version>
+  <description>多点巡路任务、状态机与安全监督。</description>
+  <maintainer email="maowenniao@163.com">maowenniao</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

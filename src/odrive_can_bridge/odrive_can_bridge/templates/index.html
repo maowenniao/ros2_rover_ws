@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ODrive 小车控制面板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e4e4e4;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            color: #00fff5;
+            text-shadow: 0 0 10px rgba(0, 255, 245, 0.5);
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #7fdbff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+
+        /* 方向控制 */
+        .direction-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 5px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .dir-btn {
+            width: 60px;
+            height: 60px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dir-btn.forward { grid-column: 2; grid-row: 1; background: #28a745; color: white; }
+        .dir-btn.left { grid-column: 1; grid-row: 2; background: #007bff; color: white; }
+        .dir-btn.stop { grid-column: 2; grid-row: 2; background: #6c757d; color: white; }
+        .dir-btn.right { grid-column: 3; grid-row: 2; background: #007bff; color: white; }
+        .dir-btn.backward { grid-column: 2; grid-row: 3; background: #dc3545; color: white; }
+
+        .dir-btn:hover { transform: scale(1.1); }
+        .dir-btn:active { transform: scale(0.95); }
+        .dir-btn.empty { background: transparent; cursor: default; }
+
+        /* 急停按钮 */
+        .estop-btn {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.3);
+            margin-top: 15px;
+        }
+
+        .estop-btn:hover { transform: scale(1.05); box-shadow: 0 8px 20px rgba(255, 0, 0, 0.5); }
+        .estop-btn:active { transform: scale(0.95); }
+
+        /* 速度滑块 */
+        .speed-control {
+            margin: 20px 0;
+        }
+
+        .speed-control label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .speed-value {
+            color: #00fff5;
+            font-weight: bold;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #333;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #00fff5;
+            cursor: pointer;
+        }
+
+        /* 模式切换 */
+        .mode-toggle {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            background: transparent;
+            color: #aaa;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .mode-btn.active {
+            border-color: #00fff5;
+            color: #00fff5;
+            background: rgba(0, 255, 245, 0.1);
+        }
+
+        /* 设备状态 */
+        .device-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .device-card {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 12px;
+            border-left: 3px solid #666;
+        }
+
+        .device-card.online { border-left-color: #28a745; }
+        .device-card.offline { border-left-color: #dc3545; }
+        .device-card.error { border-left-color: #ffc107; }
+
+        .device-id {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .device-info {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 0.75rem;
+            margin-top: 5px;
+        }
+
+        .status-badge.online { background: #28a745; color: white; }
+        .status-badge.offline { background: #dc3545; color: white; }
+        .status-badge.error { background: #ffc107; color: black; }
+
+        /* 工具按钮 */
+        .tool-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #17a2b8;
+            color: white;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 5px;
+        }
+
+        .tool-btn:hover { background: #138496; transform: scale(1.05); }
+
+        /* 状态栏 */
+        .status-bar {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        .status-bar div {
+            margin: 5px 0;
+            font-size: 0.9rem;
+        }
+
+        .status-bar .connected { color: #28a745; }
+        .status-bar .disconnected { color: #dc3545; }
+
+        /* 键盘提示 */
+        .keyboard-hint {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            font-size: 0.85rem;
+            color: #aaa;
+            text-align: center;
+            max-width: 600px;
+        }
+
+        .keyboard-hint kbd {
+            background: #333;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin: 0 3px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 ODrive 小车控制面板</h1>
+
+    <div class="container">
+        <!-- 方向控制 -->
+        <div class="card">
+            <h2>方向控制</h2>
+            <div class="direction-pad">
+                <button class="dir-btn forward" onmousedown="sendDirection('forward')" onmouseup="stopCar()" ontouchstart="sendDirection('forward')" ontouchend="stopCar()">▲</button>
+                <button class="dir-btn left" onmousedown="sendDirection('left')" onmouseup="stopCar()" ontouchstart="sendDirection('left')" ontouchend="stopCar()">◄</button>
+                <button class="dir-btn stop" onmousedown="sendDirection('stop')" ontouchstart="sendDirection('stop')">●</button>
+                <button class="dir-btn right" onmousedown="sendDirection('right')" onmouseup="stopCar()" ontouchstart="sendDirection('right')" ontouchend="stopCar()">►</button>
+                <button class="dir-btn backward" onmousedown="sendDirection('backward')" onmouseup="stopCar()" ontouchstart="sendDirection('backward')" ontouchend="stopCar()">▼</button>
+            </div>
+            <button class="estop-btn" onclick="emergencyStop()">🛑 急停 EMERGENCY STOP</button>
+        </div>
+
+        <!-- 速度与控制模式 -->
+        <div class="card">
+            <h2>速度与控制模式</h2>
+            <div id="velocityControl">
+                <div class="speed-control">
+                    <label>速度: <span class="speed-value" id="speedValue">50</span>%</label>
+                    <input type="range" id="speedSlider" min="0" max="100" value="50" oninput="updateSpeed(this.value)">
+                </div>
+            </div>
+            <div id="positionControl" style="display: none;">
+                <label>目标位置 (turns):</label>
+                <input type="number" id="targetPosition" value="0" step="0.1" style="width: 100%; padding: 10px; margin: 10px 0; background: #333; color: #fff; border: 1px solid #555; border-radius: 5px;">
+                <button class="tool-btn" onclick="sendPositionCommand()" style="width: 100%; margin: 5px 0;">发送位置指令</button>
+                <button class="tool-btn" onclick="resetPosition()" style="width: 100%; background: #6c757d;">重置为当前位置</button>
+                <div style="margin-top: 10px; font-size: 0.9rem; color: #aaa;">
+                    <div>当前位置: <span id="currentPositionDisplay" style="color: #00fff5;">0.0000</span> turns</div>
+                </div>
+            </div>
+            <h2 style="margin-top: 20px;">控制模式</h2>
+            <div class="mode-toggle">
+                <button class="mode-btn active" onclick="setMode('velocity')" id="velocityModeBtn">速度模式</button>
+                <button class="mode-btn" onclick="setMode('position')" id="positionModeBtn">位置模式</button>
+            </div>
+        </div>
+
+        <!-- 设备状态 -->
+        <div class="card">
+            <h2>ODrive 设备状态</h2>
+            <div class="device-grid" id="deviceGrid">
+                <div class="device-card offline">
+                    <div class="device-id">Node 0</div>
+                    <div class="device-info">等待连接...</div>
+                </div>
+                <div class="device-card offline">
+                    <div class="device-id">Node 1</div>
+                    <div class="device-info">等待连接...</div>
+                </div>
+                <div class="device-card offline">
+                    <div class="device-id">Node 2</div>
+                    <div class="device-info">等待连接...</div>
+                </div>
+                <div class="device-card offline">
+                    <div class="device-id">Node 3</div>
+                    <div class="device-info">等待连接...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 工具 -->
+        <div class="card">
+            <h2>工具</h2>
+            <button class="tool-btn" onclick="scanDevices()">🔍 扫描设备</button>
+            <button class="tool-btn" onclick="setupAllDevices()">⚙️ 设置所有设备</button>
+            <button class="tool-btn" onclick="refreshStatus()">🔄 刷新状态</button>
+            <div style="margin-top: 15px;">
+                <h2>系统信息</h2>
+                <div id="systemInfo" style="font-size: 0.9rem; color: #aaa;">
+                    <div>最大线速度: 5.58 m/s</div>
+                    <div>最大角速度: 68.07 rad/s</div>
+                    <div>轮径: 0.085 m</div>
+                    <div>轮距: 0.40 m</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 状态栏 -->
+    <div class="status-bar">
+        <div id="connectionStatus">连接状态: <span class="disconnected">未连接</span></div>
+        <div id="currentCommand">当前指令: 无</div>
+        <div id="lastUpdate">最后更新: --</div>
+    </div>
+
+    <!-- 键盘提示 -->
+    <div class="keyboard-hint">
+        <strong>键盘控制:</strong> 使用 <kbd>W</kbd> 前进 <kbd>S</kbd> 后退 <kbd>A</kbd> 左转 <kbd>D</kbd> 右转 <kbd>Space</kbd> 停止 <kbd>E</kbd> 急停
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let currentSpeed = 0.5; // 0-1
+        let currentMode = 'velocity';
+        let statusSource = null;
+
+        // 速度更新
+        function updateSpeed(value) {
+            document.getElementById('speedValue').textContent = value;
+            currentSpeed = value / 100;
+        }
+
+        // 发送方向指令
+        async function sendDirection(direction) {
+            let vx = 0, wz = 0;
+            const speed = currentSpeed;
+            const maxVx = 5.58 * speed;
+            const maxWz = 68.07 * speed;
+
+            switch(direction) {
+                case 'forward': vx = maxVx; break;
+                case 'backward': vx = -maxVx; break;
+                case 'left': wz = maxWz; break;
+                case 'right': wz = -maxWz; break;
+                case 'stop':
+                    document.getElementById('currentCommand').innerHTML = '当前指令: <span style="color:#28a745">停止</span>';
+                    await fetch(API_BASE + '/api/stop', { method: 'POST' });
+                    return;
+            }
+
+            document.getElementById('currentCommand').innerHTML = `当前指令: vx=${vx.toFixed(2)} m/s, wz=${wz.toFixed(2)} rad/s`;
+            await fetch(API_BASE + '/api/velocity', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({vx: vx, wz: wz})
+            });
+        }
+
+        // 停止
+        async function stopCar() {
+            await sendDirection('stop');
+        }
+
+        // 急停
+        async function emergencyStop() {
+            document.getElementById('currentCommand').innerHTML = '<span style="color:#ff0000">🛑 急停触发!</span>';
+            await fetch(API_BASE + '/api/emergency_stop', { method: 'POST' });
+            setTimeout(() => {
+                document.getElementById('currentCommand').textContent = '当前指令: 无';
+            }, 2000);
+        }
+
+        // 设置模式
+        async function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // 显示/隐藏对应的控制面板
+            if (mode === 'velocity') {
+                document.getElementById('velocityControl').style.display = 'block';
+                document.getElementById('positionControl').style.display = 'none';
+            } else {
+                document.getElementById('velocityControl').style.display = 'none';
+                document.getElementById('positionControl').style.display = 'block';
+            }
+            
+            await fetch(API_BASE + '/api/mode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mode: mode})
+            });
+        }
+
+        // 发送位置指令
+        async function sendPositionCommand() {
+            const targetPos = parseFloat(document.getElementById('targetPosition').value);
+            document.getElementById('currentCommand').innerHTML = `位置指令: <span style="color:#00fff5">${targetPos.toFixed(4)} turns</span>`;
+            console.log('位置指令:', targetPos);
+            // 实际使用时取消注释
+            // await fetch(API_BASE + '/api/position', {
+            //     method: 'POST',
+            //     headers: {'Content-Type': 'application/json'},
+            //     body: JSON.stringify({position: targetPos})
+            // });
+        }
+
+        // 重置位置为当前位置
+        function resetPosition() {
+            const currentPos = parseFloat(document.getElementById('currentPositionDisplay').textContent);
+            document.getElementById('targetPosition').value = currentPos.toFixed(4);
+            document.getElementById('currentCommand').innerHTML = `<span style="color:#28a745">已重置目标位置为当前位置: ${currentPos.toFixed(4)} turns</span>`;
+        }
+
+        // 扫描设备
+        async function scanDevices() {
+            document.getElementById('connectionStatus').innerHTML = '连接状态: <span style="color:#ffc107">扫描中...</span>';
+            const resp = await fetch(API_BASE + '/api/scan', { method: 'POST' });
+            const data = await resp.json();
+            if (data.found) {
+                document.getElementById('connectionStatus').innerHTML = `连接状态: <span class="connected">发现 ${data.found.length} 个设备</span>`;
+            }
+            refreshStatus();
+        }
+
+        // 设置所有设备
+        async function setupAllDevices() {
+            document.getElementById('connectionStatus').innerHTML = '<span style="color:#ffc107">设置中...</span>';
+            const resp = await fetch(API_BASE + '/api/setup', { method: 'POST' });
+            const data = await resp.json();
+            if (data.results) {
+                const allOk = Object.values(data.results).every(v => v);
+                document.getElementById('connectionStatus').innerHTML = allOk
+                    ? '<span class="connected">设置成功!</span>'
+                    : '<span class="disconnected">部分设备设置失败</span>';
+            }
+            refreshStatus();
+        }
+
+        // 刷新状态
+        async function refreshStatus() {
+            try {
+                const resp = await fetch(API_BASE + '/api/status');
+                const data = await resp.json();
+                if (data && typeof data === 'object') {
+                    updateDeviceGrid(data);
+                }
+                document.getElementById('lastUpdate').textContent = '最后更新: ' + new Date().toLocaleTimeString();
+            } catch (e) {
+                console.error('状态获取失败:', e);
+            }
+        }
+
+        // 更新设备网格
+        function updateDeviceGrid(data) {
+            const grid = document.getElementById('deviceGrid');
+            grid.innerHTML = '';
+            for (const [nid, dev] of Object.entries(data)) {
+                const statusClass = dev.is_in_error ? 'error' : (dev.is_online ? 'online' : 'offline');
+                const card = document.createElement('div');
+                card.className = `device-card ${statusClass}`;
+                card.innerHTML = `
+                    <div class="device-id">Node ${nid}</div>
+                    <div class="device-info">
+                        状态: ${dev.axis_state}<br>
+                        位置: ${dev.pos_estimate} turns<br>
+                        速度: ${dev.vel_estimate} turn/s<br>
+                        ${dev.bus_voltage > 0 ? `电压: ${dev.bus_voltage} V` : ''}
+                    </div>
+                    <span class="status-badge ${statusClass}">${dev.is_online ? '在线' : '离线'}</span>
+                `;
+                grid.appendChild(card);
+            }
+        }
+
+        // 键盘控制
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            switch(e.key.toLowerCase()) {
+                case 'w': sendDirection('forward'); break;
+                case 's': sendDirection('backward'); break;
+                case 'a': sendDirection('left'); break;
+                case 'd': sendDirection('right'); break;
+                case ' ': e.preventDefault(); sendDirection('stop'); break;
+                case 'e': emergencyStop(); break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (['w', 's', 'a', 'd'].includes(e.key.toLowerCase())) {
+                stopCar();
+            }
+        });
+
+        // 启动时自动刷新状态
+        setInterval(refreshStatus, 1000);
+        refreshStatus();
+    </script>
+</body>
+</html>

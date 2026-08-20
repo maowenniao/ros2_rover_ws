@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rover_bringup</name>
+  <version>0.1.0</version>
+  <description>四轴差动无人小车系统总启动包：组合 PX4 uXRCE-DDS Agent、CAN 总线、D435i、差速车控制、ODrive CAN 桥接。</description>
+  <maintainer email="you@example.com">Rover Developer</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>diffdrive_rover</exec_depend>
+  <exec_depend>odrive_can_bridge</exec_depend>
+  <exec_depend>d435i_launch</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
