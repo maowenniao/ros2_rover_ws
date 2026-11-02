@@ -331,16 +331,13 @@
         <!-- 工具 -->
         <div class="card">
             <h2>工具</h2>
-            <button class="tool-btn" onclick="scanDevices()">🔍 扫描设备</button>
-            <button class="tool-btn" onclick="setupAllDevices()">⚙️ 设置所有设备</button>
+            <button class="tool-btn" onclick="enableMotors()">解锁电机</button>
+            <button class="tool-btn" onclick="refreshStatus()">刷新状态</button>
             <button class="tool-btn" onclick="refreshStatus()">🔄 刷新状态</button>
             <div style="margin-top: 15px;">
                 <h2>系统信息</h2>
                 <div id="systemInfo" style="font-size: 0.9rem; color: #aaa;">
-                    <div>最大线速度: 5.58 m/s</div>
-                    <div>最大角速度: 68.07 rad/s</div>
-                    <div>轮径: 0.085 m</div>
-                    <div>轮距: 0.40 m</div>
+                    <div>正在读取限幅…</div>
                 </div>
             </div>
         </div>
@@ -362,33 +359,40 @@
         const API_BASE = window.location.origin;
         let currentSpeed = 0.5; // 0-1
         let currentMode = 'velocity';
-        let statusSource = null;
+        let holdTimer = null;
+        let limits = {max_linear_vel: 1.2, max_angular_vel: 1.2, wheel_radius: 0.085, track_width: 0.40};
 
-        // 速度更新
         function updateSpeed(value) {
             document.getElementById('speedValue').textContent = value;
             currentSpeed = value / 100;
         }
 
-        // 发送方向指令
-        async function sendDirection(direction) {
+        async function loadLimits() {
+            const resp = await fetch(API_BASE + '/api/limits');
+            limits = await resp.json();
+            document.getElementById('systemInfo').innerHTML =
+                `<div>最大线速度: ${Number(limits.max_linear_vel).toFixed(2)} m/s</div>` +
+                `<div>最大角速度: ${Number(limits.max_angular_vel).toFixed(2)} rad/s</div>` +
+                `<div>轮半径: ${Number(limits.wheel_radius).toFixed(3)} m（需实测）</div>` +
+                `<div>轮距: ${Number(limits.track_width).toFixed(2)} m（需实测）</div>`;
+        }
+
+        async function postDirection(direction) {
             let vx = 0, wz = 0;
-            const speed = currentSpeed;
-            const maxVx = 5.58 * speed;
-            const maxWz = 68.07 * speed;
-
-            switch(direction) {
-                case 'forward': vx = maxVx; break;
-                case 'backward': vx = -maxVx; break;
-                case 'left': wz = maxWz; break;
-                case 'right': wz = -maxWz; break;
-                case 'stop':
-                    document.getElementById('currentCommand').innerHTML = '当前指令: <span style="color:#28a745">停止</span>';
-                    await fetch(API_BASE + '/api/stop', { method: 'POST' });
-                    return;
+            const scale = currentSpeed;
+            const maxVx = Number(limits.max_linear_vel) * scale;
+            const maxWz = Number(limits.max_angular_vel) * scale;
+            if (direction === 'stop') {
+                document.getElementById('currentCommand').textContent = '当前指令: 停止';
+                await fetch(API_BASE + '/api/stop', { method: 'POST' });
+                return;
             }
-
-            document.getElementById('currentCommand').innerHTML = `当前指令: vx=${vx.toFixed(2)} m/s, wz=${wz.toFixed(2)} rad/s`;
+            if (direction === 'forward') vx = maxVx;
+            if (direction === 'backward') vx = -maxVx;
+            if (direction === 'left') wz = maxWz;
+            if (direction === 'right') wz = -maxWz;
+            document.getElementById('currentCommand').textContent =
+                `当前指令: vx=${vx.toFixed(2)} m/s, wz=${wz.toFixed(2)} rad/s`;
             await fetch(API_BASE + '/api/velocity', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -396,9 +400,19 @@
             });
         }
 
+        function sendDirection(direction) {
+            if (holdTimer) clearInterval(holdTimer);
+            postDirection(direction);
+            if (direction !== 'stop') {
+                holdTimer = setInterval(() => postDirection(direction), 100);
+            }
+        }
+
         // 停止
         async function stopCar() {
-            await sendDirection('stop');
+            if (holdTimer) clearInterval(holdTimer);
+            holdTimer = null;
+            await postDirection('stop');
         }
 
         // 急停
@@ -434,15 +448,7 @@
 
         // 发送位置指令
         async function sendPositionCommand() {
-            const targetPos = parseFloat(document.getElementById('targetPosition').value);
-            document.getElementById('currentCommand').innerHTML = `位置指令: <span style="color:#00fff5">${targetPos.toFixed(4)} turns</span>`;
-            console.log('位置指令:', targetPos);
-            // 实际使用时取消注释
-            // await fetch(API_BASE + '/api/position', {
-            //     method: 'POST',
-            //     headers: {'Content-Type': 'application/json'},
-            //     body: JSON.stringify({position: targetPos})
-            // });
+            document.getElementById('currentCommand').textContent = '位置模式未实现';
         }
 
         // 重置位置为当前位置
@@ -453,28 +459,10 @@
         }
 
         // 扫描设备
-        async function scanDevices() {
-            document.getElementById('connectionStatus').innerHTML = '连接状态: <span style="color:#ffc107">扫描中...</span>';
-            const resp = await fetch(API_BASE + '/api/scan', { method: 'POST' });
-            const data = await resp.json();
-            if (data.found) {
-                document.getElementById('connectionStatus').innerHTML = `连接状态: <span class="connected">发现 ${data.found.length} 个设备</span>`;
-            }
-            refreshStatus();
-        }
-
-        // 设置所有设备
-        async function setupAllDevices() {
-            document.getElementById('connectionStatus').innerHTML = '<span style="color:#ffc107">设置中...</span>';
-            const resp = await fetch(API_BASE + '/api/setup', { method: 'POST' });
-            const data = await resp.json();
-            if (data.results) {
-                const allOk = Object.values(data.results).every(v => v);
-                document.getElementById('connectionStatus').innerHTML = allOk
-                    ? '<span class="connected">设置成功!</span>'
-                    : '<span class="disconnected">部分设备设置失败</span>';
-            }
-            refreshStatus();
+        async function enableMotors() {
+            document.getElementById('connectionStatus').textContent = '连接状态: 正在解锁电机';
+            await fetch(API_BASE + '/api/enable', { method: 'POST' });
+            document.getElementById('connectionStatus').textContent = '连接状态: 已请求闭环，确认轮子离地';
         }
 
         // 刷新状态
@@ -495,19 +483,21 @@
         function updateDeviceGrid(data) {
             const grid = document.getElementById('deviceGrid');
             grid.innerHTML = '';
-            for (const [nid, dev] of Object.entries(data)) {
-                const statusClass = dev.is_in_error ? 'error' : (dev.is_online ? 'online' : 'offline');
+            const names = Object.keys(data);
+            if (!names.length) {
+                grid.innerHTML = '<div class="device-card offline"><div class="device-info">还没有 /wheel_state</div></div>';
+                return;
+            }
+            for (const name of names) {
+                const dev = data[name];
                 const card = document.createElement('div');
-                card.className = `device-card ${statusClass}`;
+                card.className = 'device-card online';
                 card.innerHTML = `
-                    <div class="device-id">Node ${nid}</div>
+                    <div class="device-id">${name}</div>
                     <div class="device-info">
-                        状态: ${dev.axis_state}<br>
-                        位置: ${dev.pos_estimate} turns<br>
-                        速度: ${dev.vel_estimate} turn/s<br>
-                        ${dev.bus_voltage > 0 ? `电压: ${dev.bus_voltage} V` : ''}
+                        位置: ${Number(dev.position).toFixed(3)} rad<br>
+                        速度: ${Number(dev.velocity).toFixed(3)} rad/s
                     </div>
-                    <span class="status-badge ${statusClass}">${dev.is_online ? '在线' : '离线'}</span>
                 `;
                 grid.appendChild(card);
             }
@@ -535,6 +525,7 @@
         // 启动时自动刷新状态
         setInterval(refreshStatus, 1000);
         refreshStatus();
+        loadLimits();
     </script>
 </body>
 </html>

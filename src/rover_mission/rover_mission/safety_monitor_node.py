@@ -3,6 +3,7 @@
 import math
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
@@ -14,9 +15,15 @@ class SafetyMonitorNode(Node):
         self.declare_parameter('max_linear', 1.5)
         self.declare_parameter('max_angular', 2.0)
         self.declare_parameter('min_front_distance', 0.30)
+        latched = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
         self.create_subscription(Twist, '/cmd_vel_nav', self._cmd_cb, 10)
         self.create_subscription(LaserScan, '/scan', self._scan_cb, 10)
-        self.estop_pub = self.create_publisher(Bool, '/estop', 10)
+        self.estop_pub = self.create_publisher(Bool, '/estop', latched)
         self.last_cmd = Twist()
         self.min_front = float('inf')
         self.create_timer(0.1, self._evaluate)

@@ -37,6 +37,7 @@ setup(
         'console_scripts': [
             'arm_rover = rover_bringup.arm_rover:main',
             'estop_rover = rover_bringup.estop_rover:main',
+            'estop_action_node = rover_bringup.estop_rover:action_main',
         ],
     },
 )

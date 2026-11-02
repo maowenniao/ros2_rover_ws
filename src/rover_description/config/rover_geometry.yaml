@@ -1,0 +1,20 @@
+# 全车唯一的几何与速度上限。运动学、轮速里程计、URDF 都读这一份。
+# 带 MEASURE 的数值是占位，上车前按实车改掉，不要沿用别的文件里的旧数字。
+/**:
+  ros__parameters:
+    # MEASURE: 轮毂外半径 (m)。6.5 寸轮大约 0.085，以接地半径为准。
+    wheel_radius: 0.085
+    # MEASURE: 左右轮接地点横向距离 (m)。
+    track_width: 0.40
+    # MEASURE: 前后轴接地点纵向距离 (m)。差速解算不用它，URDF 和转弯包络用。
+    wheel_base: 0.50
+    # MEASURE: 四个电机的方向，顺序 [左前, 左后, 右前, 右后]。
+    # 轮子离地逐个正转，车体前进方向为正时保持 1，反了就改成 -1。
+    # 默认全是 +1，避免猜一侧为负导致一通电就原地打转。
+    wheel_directions: [1.0, 1.0, 1.0, 1.0]
+    # MEASURE: 单个车轮允许的最大角速度 (rad/s)，不是车体 yaw。
+    # 0.085 m 半径下 20 rad/s 约等于轮缘 1.7 m/s。ODrive vel_limit 由它换算。
+    max_wheel_speed: 20.0
+    # 车体指令限幅。应不大于轮速上限能实现的速度。
+    max_linear_vel: 1.2
+    max_angular_vel: 1.2

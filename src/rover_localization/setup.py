@@ -18,6 +18,7 @@ setup(
          glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
+    tests_require=['pytest'],
     zip_safe=True,
     maintainer='maowenniao',
     maintainer_email='maowenniao@163.com',

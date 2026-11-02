@@ -1,188 +1,108 @@
-# 四轴差动无人小车 ROS 2 工作空间（V3.1）
+# 四轮差速车 ROS 2 工作空间
 
-> Jetson Orin Nano + Pixhawk 6C（**USB 直连**）+ 2× ODrive V3.6（**USB-CAN**）+ Intel D435i  
-> **Ubuntu 24.04 Noble + ROS 2 Jazzy Jalisco**（LTS）  
-> PX4 `SYS_AUTOSTART = 50000` = **Generic Rover Differential**（PX4 原生 4 轮差速）
+Jetson Orin Nano + Pixhawk 6C（USB，仅解锁 / 急停 / 状态）+ 两块 ODrive V3.6（USB-CAN，四轴）+ Intel D435i。
 
----
+Ubuntu 24.04 + ROS 2 Jazzy。电机由 Jetson 做差速解算后直接走 CAN，不把 `/cmd_vel` 交给 PX4 的 rover 控制器。
 
-## 📦 工作空间结构（V3.1）
+## 控制链
 
 ```
-ros2_rover_ws/
-├── src/
-│   ├── diffdrive_rover/         # 差速车控制：cmd_vel → PX4 TrajectorySetpoint
-│   ├── odrive_can_bridge/       # ODrive CAN 总线桥接（python-can）
-│   ├── d435i_launch/            # D435i 相机启动封装
-│   ├── rover_description/       # ⭐ URDF 3D 模型 + 关节桥接
-│   ├── rover_bringup/           # ⭐ 系统总启动 + 诊断脚本 + ARM/Estop
-│   └── (外部依赖)
-│       ├── px4_msgs/            # PX4 消息定义（git clone）
-│       └── px4_ros_com/         # PX4 ROS 2 桥接示例（git clone）
+/cmd_vel_nav ──可选 safety_cmdvel_node──► /cmd_vel
+                                            │
+                                            ▼
+                              odrive_velocity_control   ← 唯一的 /wheel_cmd 发布者
+                                            │
+                                            ▼
+                              odrive_can_node ──CAN──► ODrive
+                                            │
+                                            ▼
+                              /wheel_state ──► wheel_odometry ──► /wheel_odom
+                                            │                    odom → base_link
+                                            ▼
+                              joint_state_bridge ──► /joint_states
 ```
 
----
+`/odrive_enable` 为 true 之前，驱动不会进入闭环。`/wheel_cmd` 超过 0.2 s 没有更新时，CAN 节点改发 0，避免 ODrive 锁存上一次速度。
 
-## 🚀 快速开始
+急停（网页、`estop_rover` 或 `/estop`）会同时：
 
-### 1. 一次性环境准备（Ubuntu 24.04 + ROS 2 Jazzy）
+1. 把 `/cmd_vel` 清零
+2. 让 ODrive 收到 Estop 并退出闭环
+3. 对 PX4 发强制 disarm
+
+PX4 的 `TrajectorySetpoint` 节点还在 `diffdrive_rover` 里，但总启动不会加载它，它也不再发布 `/wheel_cmd`。
+
+## 包
+
+| 包 | 作用 |
+|---|---|
+| `rover_description` | 几何参数 `config/rover_geometry.yaml`、URDF、关节桥 |
+| `odrive_can_bridge` | CAN 协议、差速、轮速里程计、本机网页遥控 |
+| `diffdrive_rover` | 可选的速度安全层；可选的 PX4 设定点（不驱动轮子） |
+| `rover_bringup` | `full_system`、解锁、急停 |
+| `d435i_launch` | RealSense 启动 |
+| `rover_localization` / `rover_mapping` / `rover_navigation` / `rover_mission` | 后续定位和导航的草稿，这条控制链不用它们 |
+
+几何只改这一份：`src/rover_description/config/rover_geometry.yaml`。带 `MEASURE` 的是占位值。车体 yaw 上限是 `max_angular_vel`（rad/s），不要把轮子角速度填进去。
+
+## 构建
 
 ```bash
-# 系统依赖
-sudo apt update
-sudo apt install -y git curl wget vim net-tools iputils-ping \
-                    iproute2 can-utils udev python3-pip \
-                    software-properties-common
 sudo apt install -y ros-jazzy-desktop python3-colcon-common-extensions \
-                    python3-rosdep \
-                    ros-jazzy-xacro ros-jazzy-robot-state-publisher \
-                    ros-jazzy-joint-state-publisher-gui \
-                    ros-jazzy-realsense2-camera ros-jazzy-realsense2-description \
-                    ros-jazzy-rviz2 ros-jazzy-rmw-cyclonedds-cpp
-pip3 install python-can pyulog empy==3.3.4
-
-# 自动 source
-echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
-echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc
-echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc
-source ~/.bashrc
-sudo rosdep init && rosdep update
-
-# 编译 Micro XRCE-DDS Agent（Serial 模式）
-mkdir -p ~/tools && cd ~/tools
-git clone https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
-cd Micro-XRCE-DDS-Agent && git submodule update --init --recursive
-mkdir build && cd build && cmake .. && make -j$(nproc)
-sudo make install && sudo ldconfig
-```
-
-### 2. 准备源代码
-
-```bash
-mkdir -p ~/ros2_rover_ws/src
+    python3-rosdep python3-can python3-flask python3-yaml \
+    ros-jazzy-xacro ros-jazzy-robot-state-publisher \
+    ros-jazzy-joint-state-publisher-gui ros-jazzy-rviz2
+source /opt/ros/jazzy/setup.bash
 cd ~/ros2_rover_ws/src
-
-# 本项目的 5 个包直接拷贝到此目录
-# 然后克隆 PX4 上游：
 git clone https://github.com/PX4/px4_msgs.git -b release/1.14
-git clone https://github.com/PX4/px4_ros_com.git -b release/1.14
-```
-
-### 3. 构建
-
-```bash
+# px4_ros_com 没有 release/1.14 这个分支名，1.14 行是 release/v1.14。
+# 本仓库的控制链不依赖它。要对齐差速机架 50000，固件和消息请改用 PX4 1.16。
+git clone https://github.com/PX4/px4_ros_com.git -b release/v1.14
 cd ~/ros2_rover_ws
 rosdep install --from-paths src --ignore-src -y --rosdistro=jazzy
 colcon build --symlink-install
 source install/setup.bash
+colcon test --packages-select odrive_can_bridge diffdrive_rover rover_description
+colcon test-result --verbose
 ```
 
-### 4. 硬件配置
+`python3-can` 没有对应的 rosdep 键，所以用 apt 安装，不要写进 `package.xml`。
+
+## 启动
 
 ```bash
-# 4.1 USB 直连 Pixhawk 6C（创建 /dev/pixhawk 软链接）
-sudo ./src/rover_bringup/scripts/setup_pixhawk_usb.sh
+# 轮子先离地。
+ros2 launch rover_bringup full_system.launch.py enable_d435i:=false enable_agent:=true
 
-# 4.2 USB-CAN 转接板 → can0
-sudo ./src/rover_bringup/scripts/setup_can.sh can0 250000
+# 另一终端：允许闭环并解锁 PX4
+ros2 run rover_bringup arm_rover
 
-# 4.3 （可选）安装 XRCE Agent 为 systemd 服务
-sudo ./src/rover_bringup/scripts/install_uxrce_service.sh
+# 低速前进（会持续发，Ctrl-C 后 0.5 s 内停车）
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.1}}" -r 10
+
+# 急停
+ros2 run rover_bringup estop_rover
 ```
 
-### 5. 启动系统
+可选参数：
 
-```bash
-# 一键启动
-ros2 launch rover_bringup full_system.launch.py
+- `enable_safety:=true`：遥控改发 `/cmd_vel_nav`，安全层输出 `/cmd_vel`。没有 `/scan` 时它会停车。
+- `enable_web:=true`：网页只听 `127.0.0.1:5000`，向 `/cmd_vel` 发布，不占用 CAN。要对局域网开放必须自己改 `--host`，并限制网络。
+- `enable_rviz:=true`
 
-# 包含 RViz（看 3D 模型 + 传感器）
-ros2 launch rover_bringup full_system.launch.py enable_rviz:=true
+单独调底盘：`ros2 launch odrive_can_bridge odrive_can.launch.py`
 
-# 自定义 Pixhawk 设备
-ros2 launch rover_bringup full_system.launch.py pixhawk_device:=/dev/ttyACM1
-```
+## 上车前核对
 
-启动顺序：
-1. **T+0.0s**：SocketCAN + 检查 `/dev/pixhawk`
-2. **T+0.5s**：Micro XRCE-DDS Agent (Serial @ 921600)
-3. **T+1.0s**：URDF robot_state_publisher + joint_state_bridge
-4. **T+1.5s**：D435i 相机
-5. **T+2.0s**：差速车控制 + PX4 里程计桥接
-6. **T+2.5s**：ODrive CAN 桥接 + 轮速里程计
-7. **T+3.5s**：RViz
+轮子离地、车体垫稳，电流先用 yaml 里的小值。
 
-### 6. 单独调试各模块
+1. 改 `rover_geometry.yaml`：用尺子量轮半径、左右轮距、前后轴距。
+2. `wheel_directions` 先保持 `[1, 1, 1, 1]`。
+3. `candump can0` 能看到心跳。`ros2 topic echo /odrive_diagnostic` 里四轴先是未闭环。
+4. `ros2 run rover_bringup arm_rover` 之后四轴应变为 state `8`（闭环）。此时轮子不应转。
+5. 每次只让一个轮子转。把 `wheel_directions` 里对应那一项临时改成只给该轮非零指令不方便，可以临时把 `/wheel_cmd` 的发布停掉，用下面的方式看反馈方向：给很小的 `linear.x`（例如 0.05），看哪几个轮子往“车头方向”转。反了的轴把 `wheel_directions` 改成 `-1`，改完重启 launch。
+6. 四个轮子都朝车头转之后，再给 `angular.z: 0.2`。从上往下看，左转时左轮应往后、右轮应往前。
+7. 确认松手或杀掉 `topic pub` 后 0.5 s 内轮子停下，`estop_rover` 后轴退出闭环且 PX4 上锁。
+8. 轮子着地前把 `current_lim` 和 `max_wheel_speed` 改成电机铭牌允许的值。建议在 ODrive 上把 `axis.config.watchdog_timeout` 设成大约 0.5 s，这样 CAN 节点崩溃时驱动器自己退出闭环。
 
-```bash
-ros2 launch rover_description rover_description.launch.py   # 仅 URDF
-ros2 launch diffdrive_rover diffdrive.launch.py              # 仅差速车控制
-ros2 launch odrive_can_bridge odrive_can.launch.py            # 仅 ODrive CAN
-ros2 launch d435i_launch d435i.launch.py                    # 仅 D435i
-```
-
----
-
-## 🛠 调试与诊断
-
-| 工具 | 命令 | 用途 |
-|------|------|------|
-| USB Pixhawk | `sudo ./scripts/setup_pixhawk_usb.sh` | 检查 /dev/pixhawk |
-| CAN 总线监听 | `python3 scripts/can_bus_test.py can0` | 验证 ODrive 心跳 |
-| PX4 链路检查 | `python3 scripts/px4_ros2_check.py` | 验证 uXRCE-DDS |
-| 命令观察 | `python3 scripts/cmdvel_teleop_test.py` | 观察 cmd_vel 与 setpoint |
-| 解锁 | `ros2 run rover_bringup arm_rover` | 解锁 PX4 |
-| 急停 | `ros2 run rover_bringup estop_rover` | Disarm + 0 速度 |
-
----
-
-## 📋 关键话题（V3.1）
-
-| 话题 | 方向 | 类型 |
-|------|------|------|
-| `/cmd_vel` | 输入 | geometry_msgs/Twist |
-| `/fmu/out/vehicle_odometry` | PX4→ROS | px4_msgs/VehicleOdometry |
-| `/fmu/out/vehicle_status` | PX4→ROS | px4_msgs/VehicleStatus |
-| `/fmu/in/trajectory_setpoint` | ROS→PX4 | px4_msgs/TrajectorySetpoint |
-| `/fmu/in/vehicle_command` | ROS→PX4 | px4_msgs/VehicleCommand |
-| `/wheel_cmd` | ROS 内部 | std_msgs/Float32MultiArray |
-| `/wheel_state` | ROS 内部 | sensor_msgs/JointState |
-| `/joint_states` | ROS 内部 | sensor_msgs/JointState（URDF） |
-| `/robot_description` | ROS 内部 | std_msgs/String（URDF 内容） |
-| `/odom` | ROS 内部 | nav_msgs/Odometry |
-| `/wheel_odom` | ROS 内部 | nav_msgs/Odometry |
-
----
-
-## ⚙️ 参数调节
-
-- **物理参数**：编辑 `src/diffdrive_rover/config/diffdrive_params.yaml`
-- **CAN 配置**：编辑 `src/odrive_can_bridge/config/odrive_can_params.yaml`
-- **URDF 尺寸**：编辑 `src/rover_description/urdf/rover.urdf.xacro`
-
----
-
-## 🚨 安全提示
-
-1. **ODrive 首次上电：电机必须悬空！**
-2. **Pixhawk 必须先处于 Offboard 模式才会响应 setpoint**
-3. **PX4 机架必须选 Generic Rover Differential（SYS_AUTOSTART=50000）**
-4. 紧急情况：`ros2 run rover_bringup estop_rover`
-
----
-
-## 🔄 V1 → V2 → V3.1 变更摘要
-
-| 项 | V1 | V2 | **V3.1** |
-|----|----|----|----|
-| Ubuntu | 22.04 | 22.04 | **24.04 Noble** |
-| ROS 2 | Humble | Humble | **Jazzy Jalisco** |
-| Jetson↔Pixhawk | 以太网 | USB 直连 | USB 直连 |
-| Jetson↔ODrive | SocketCAN | USB-CAN | USB-CAN |
-| PX4 机架 | 1010 | 10002 | **50000（Generic Rover Differential）** |
-| 3D 模型 | 无 | URDF | URDF |
-| launch 节点 | 5 | 7 | 7 |
-
----
-
-更多信息见 `../Jetson_Pixhawk6C_通信与ROS2配置指南.md`（V3.1）。
+不要同时跑旧的 `cmdvel_to_setpoint` 来驱动轮子。Nav2、EKF、`ros2_control` 还没接到这条链上。

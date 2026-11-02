@@ -1,77 +1,43 @@
-"""odrive_can.launch.py - 启动 ODrive CAN 桥接与轮速里程计节点。"""
+"""底盘链路：/cmd_vel → /wheel_cmd → ODrive CAN → /wheel_state → /wheel_odom。"""
 import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
-
-
-def launch_setup(context, *args, **kwargs):
-    """Setup launch nodes with proper parameter handling."""
-    pkg = 'odrive_can_bridge'
-    pkg_share = get_package_share_directory(pkg)
-    config_dir = os.path.join(pkg_share, 'config')
-    
-    # 默认参数文件
-    default_params_file = os.path.join(config_dir, 'odrive_can_params.yaml')
-    params_file = LaunchConfiguration('params_file').perform(context)
-    
-    # 如果未指定参数文件，使用默认的
-    if not params_file or params_file == default_params_file:
-        params_file = default_params_file
-    
-    # ODrive CAN 桥接节点
-    can_node = Node(
-        package=pkg,
-        executable='odrive_can_node',
-        name='odrive_can_node',
-        output='screen',
-        parameters=[params_file],
-        remappings=[
-            ('/wheel_cmd', '/wheel_cmd'),
-            ('/wheel_state', '/wheel_state'),
-        ],
-    )
-
-    # 轮速里程计节点
-    # 注意：参数与 diffdrive_rover 的 diffdrive_params.yaml 保持一致
-    wheel_odom_node = Node(
-        package=pkg,
-        executable='wheel_odometry_node',
-        name='wheel_odometry_node',
-        output='screen',
-        parameters=[
-            {
-                'wheel_radius': 0.085,    # 6.5 寸轮 (0.085m)
-                'track_width': 0.40,       # 左右轮距 (m)
-                'wheel_base': 0.50,        # 前后轴距 (m)
-                'frame_id': 'odom',
-                'child_frame_id': 'base_link',
-            }
-        ],
-        remappings=[
-            ('/wheel_state', '/wheel_state'),
-            ('/wheel_odom', '/wheel_odom'),
-        ],
-    )
-
-    return [can_node, wheel_odom_node]
 
 
 def generate_launch_description() -> LaunchDescription:
-    """Generate launch description."""
-    # 参数声明
-    params_file_arg = DeclareLaunchArgument(
-        'params_file',
-        default_value='/dev/null',
-        description='ODrive CAN 参数文件路径（默认/dev/null 使用内置默认值）',
-    )
-
-    # 使用 OpaqueFunction 动态创建节点
-    opaque_launch = OpaqueFunction(function=launch_setup)
-
+    geometry = os.path.join(
+        get_package_share_directory('rover_description'), 'config', 'rover_geometry.yaml')
+    odrive_params = os.path.join(
+        get_package_share_directory('odrive_can_bridge'), 'config', 'odrive_can_params.yaml')
     return LaunchDescription([
-        params_file_arg,
-        opaque_launch,
+        DeclareLaunchArgument('geometry_file', default_value=geometry),
+        DeclareLaunchArgument('odrive_params', default_value=odrive_params),
+        Node(
+            package='odrive_can_bridge',
+            executable='odrive_velocity_control',
+            name='odrive_velocity_control',
+            output='screen',
+            parameters=[LaunchConfiguration('geometry_file')],
+        ),
+        Node(
+            package='odrive_can_bridge',
+            executable='odrive_can_node',
+            name='odrive_can_node',
+            output='screen',
+            parameters=[
+                LaunchConfiguration('geometry_file'),
+                LaunchConfiguration('odrive_params'),
+            ],
+        ),
+        Node(
+            package='odrive_can_bridge',
+            executable='wheel_odometry_node',
+            name='wheel_odometry_node',
+            output='screen',
+            parameters=[LaunchConfiguration('geometry_file')],
+        ),
     ])

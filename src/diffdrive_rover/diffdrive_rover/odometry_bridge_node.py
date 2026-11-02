@@ -59,7 +59,10 @@ class OdometryBridgeNode(Node):
         self.odom_pub = self.create_publisher(Odometry, '/odom', qos_reliable)
 
         self._tf_broadcaster = None
-        if bool(self.get_parameter('publish_tf').value):
+        publish_tf = self.get_parameter('publish_tf').value
+        if isinstance(publish_tf, str):
+            publish_tf = publish_tf.lower() in ('1', 'true', 'yes', 'on')
+        if publish_tf:
             from tf2_ros import TransformBroadcaster  # type: ignore
             self._tf_broadcaster = TransformBroadcaster(self)
 
