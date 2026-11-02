@@ -1,0 +1,26 @@
+# 通道名对应 ManualControlSetpoint 的字段。QGC 里把遥控器通道映射到这些功能。
+# aux 大于 mode_threshold 为手动，小于负阈值为自动，中间保持上一模式。
+rc_command_node:
+  ros__parameters:
+    command_topic: /cmd_vel_nav
+    auto_topic: /cmd_vel_auto
+    relay_auto: true
+    # 还没收到开关之前按自动转发，这样没有遥控器时 Nav2 仍能走。
+    default_mode: auto
+    deadband: 0.06
+    expo: 0.30
+    forward_channel: pitch
+    yaw_channel: yaw
+    mode_channel: aux1
+    mode_threshold: 0.30
+    estop_channel: aux2
+    estop_threshold: 0.50
+    rc_timeout_sec: 0.50
+    auto_timeout_sec: 0.50
+    publish_hz: 20.0
+
+px4_state_node:
+  ros__parameters:
+    publish_hz: 30.0
+    # 诊断里电池剩余低于该比例记为警告。急停阈值用 PX4 的 battery warning 等级。
+    battery_warn_remaining: 0.20

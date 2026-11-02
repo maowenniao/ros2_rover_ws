@@ -25,7 +25,8 @@ def _nodes(context, *args, **kwargs):
     params = str(params_path)
     map_yaml = LaunchConfiguration('map').perform(context)
     raw = ('cmd_vel', '/cmd_vel_raw')
-    smooth = [('cmd_vel', '/cmd_vel_raw'), ('cmd_vel_smoothed', '/cmd_vel_nav')]
+    # 平滑器只写 /cmd_vel_auto。rc_command_node 在自动模式下转发到 /cmd_vel_nav。
+    smooth = [('cmd_vel', '/cmd_vel_raw'), ('cmd_vel_smoothed', '/cmd_vel_auto')]
     common = {'output': 'screen', 'parameters': [params]}
     return [
         Node(package='nav2_map_server', executable='map_server', name='map_server',

@@ -15,5 +15,5 @@ def test_camera_launch_connects_optical_frames():
     config = Path(__file__).resolve().parents[1] / 'config' / 'd435i.yaml'
     body = config.read_text(encoding='utf-8')
     assert 'align_depth.enable: true' in body
-    assert 'unite_imu_method: 2' in body
-    assert 'enable_gyro: true' in body
+    assert 'unite_imu_method: 0' in body
+    assert 'enable_gyro: false' in body

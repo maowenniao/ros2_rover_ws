@@ -36,6 +36,6 @@ def test_materialized_limits_stay_inside_chassis():
 
 def test_navigation_launch_remaps_into_safety_layer():
     text = Path(__file__).resolve().parents[1].joinpath('launch', 'navigation.launch.py').read_text(encoding='utf-8')
-    assert '/cmd_vel_nav' in text
+    assert '/cmd_vel_auto' in text
     assert '/cmd_vel_raw' in text
     assert 'mapping.launch.py' not in text
