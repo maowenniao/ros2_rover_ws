@@ -1,23 +1,10 @@
-# 四轮差速小车参数
-# 物理参数
-wheel_radius: 0.085            # 轮子半径，单位 m (6.5 寸轮)
-wheel_base: 0.50              # 前后轴距，单位 m
-track_width: 0.40             # 左右轮距，单位 m
-max_linear_vel: 5.58           # 最大线速度 m/s
-max_angular_vel: 68.07          # 最大角速度 rad/s
-
-# 控制频率
-cmdvel_timeout: 0.5           # /cmd_vel 失联超时时长 (s)
-setpoint_rate_hz: 20.0        # 发送 TrajectorySetpoint 的频率
-
-# Pixhawk 6C 目标系统编号
-target_system: 1
-target_component: 1
-
-# 速度模式 vs 位置模式
-# true:  TrajectorySetpoint.velocity 模式 (推荐)
-# false: TrajectorySetpoint.position 模式
-velocity_mode: true
-
-# 安全：限幅
-enable_safety_clamp: true
+# 仅给可选的 PX4 速度设定点节点使用。不驱动电机。
+# 车体速度上限以 rover_geometry.yaml 为准，launch 会同时加载那一份。
+cmdvel_to_setpoint_node:
+  ros__parameters:
+    cmdvel_timeout: 0.5
+    setpoint_rate_hz: 20.0
+    target_system: 1
+    target_component: 1
+    velocity_mode: true
+    enable_safety_clamp: true

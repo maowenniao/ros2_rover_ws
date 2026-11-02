@@ -3,10 +3,9 @@
 <package format="3">
   <name>rover_localization</name>
   <version>0.1.0</version>
-  <description>轮速 + Pixhawk IMU EKF 融合，输出统一里程计 /odometry/filtered。</description>
+  <description>轮速里程计与 D435i IMU 的 EKF，发布 /odom 和唯一的 odom 到 base_link。</description>
   <maintainer email="maowenniao@163.com">maowenniao</maintainer>
   <license>MIT</license>
   <exec_depend>robot_localization</exec_depend>
-  <exec_depend>nav2_amcl</exec_depend>
   <export><build_type>ament_python</build_type></export>
 </package>

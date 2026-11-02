@@ -37,20 +37,25 @@ except ImportError:
     print("安装: pip install python-can")
     sys.exit(1)
 
-# ODrive CAN 命令 ID
-CMD_HEARTBEAT = 0x01
-CMD_ESTOP = 0x02
-CMD_SET_AXIS_STATE = 0x06
-CMD_GET_ENCODER_ESTIMATES = 0x07
-CMD_SET_CONTROLLER_MODE = 0x09
-CMD_SET_INPUT_VEL = 0x0C
-CMD_SET_INPUT_POS = 0x0D
-CMD_SET_INPUT_TORQUE = 0x0E
-CMD_SET_LIMITS = 0x10
-CMD_GET_IQ = 0x18
-CMD_REBOOT = 0x1C
-CMD_GET_BUS_VOLTAGE_CURRENT = 0x1D
-CMD_CLEAR_ERRORS = 0x1E
+from odrive_can_bridge.can_protocol import (
+    CMD_CLEAR_ERRORS,
+    CMD_ESTOP,
+    CMD_GET_BUS_VOLTAGE_CURRENT,
+    CMD_GET_ENCODER_ESTIMATES,
+    CMD_GET_IQ,
+    CMD_HEARTBEAT,
+    CMD_REBOOT,
+    CMD_SET_AXIS_STATE,
+    CMD_SET_CONTROLLER_MODE,
+    CMD_SET_INPUT_POS,
+    CMD_SET_INPUT_TORQUE,
+    CMD_SET_INPUT_VEL,
+    CMD_SET_LIMITS,
+    decode_encoder_estimates,
+    decode_heartbeat,
+    make_can_id,
+    parse_can_id,
+)
 
 # Axis State
 AXIS_STATE_IDLE = 0x01
@@ -81,23 +86,6 @@ CONTROL_MODE_NAMES = {
     CONTROL_MODE_VELOCITY: "VELOCITY",
     CONTROL_MODE_POSITION: "POSITION",
 }
-
-# CAN ID 计算
-NODE_ID_MASK = 0x3F
-CMD_ID_SHIFT = 6
-
-
-def make_can_id(node_id: int, cmd_id: int) -> int:
-    """根据 ODrive 协议组装 CAN 帧 ID."""
-    return ((cmd_id & 0x3F) << CMD_ID_SHIFT) | (node_id & NODE_ID_MASK)
-
-
-def parse_can_id(arb_id: int):
-    """解析 arb_id 返回 (cmd_id, node_id)."""
-    node_id = arb_id & NODE_ID_MASK
-    cmd_id = (arb_id >> CMD_ID_SHIFT) & 0x3F
-    return cmd_id, node_id
-
 
 # ======================================================================
 # ODrive 错误码
@@ -281,12 +269,11 @@ class ODriveCanTester:
         dev.is_online = True
         dev.heartbeat_count += 1
 
-        if len(msg.data) >= 4:
-            dev.axis_state = struct.unpack('<I', msg.data[0:4])[0]
         if len(msg.data) >= 8:
-            err_flags = struct.unpack('<I', msg.data[4:8])[0]
-            dev.axis_error = (err_flags >> 16) & 0xFFFF
-            dev.motor_error = err_flags & 0xFFFF
+            hb = decode_heartbeat(bytes(msg.data))
+            dev.axis_state = hb.axis_state
+            dev.axis_error = hb.axis_error
+            dev.motor_error = int(hb.motor_error)
 
     def _parse_encoder(self, node_id: int, msg) -> None:
         """解析编码器估计消息."""
@@ -294,7 +281,7 @@ class ODriveCanTester:
             return
         dev = self.devices[node_id]
         if len(msg.data) >= 8:
-            dev.pos_estimate, dev.vel_estimate = struct.unpack('<ff', msg.data[0:8])
+            dev.pos_estimate, dev.vel_estimate = decode_encoder_estimates(bytes(msg.data))
 
     def _parse_bus_voltage(self, node_id: int, msg) -> None:
         """解析总线电压/电流消息."""

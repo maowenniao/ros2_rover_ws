@@ -1,0 +1,26 @@
+# RealSense D435i。rs_launch 读取的是扁平字典，不是 ros__parameters。
+# 分辨率按 Orin Nano 的 USB 带宽选：640x480 @ 15，不开 30 Hz 高清。
+enable_color: true
+rgb_camera.color_profile: 640x480x15
+enable_depth: true
+depth_module.depth_profile: 640x480x15
+enable_infra1: false
+enable_infra2: false
+enable_gyro: true
+enable_accel: true
+unite_imu_method: 2
+enable_sync: true
+align_depth.enable: true
+pointcloud.enable: true
+# 点云先抽点，减轻 Jetson 上的体素层负担。
+decimation_filter.enable: true
+decimation_filter.filter_magnitude: 2
+# 外参由本包的静态 TF 发布，避免和驱动抢同一对坐标系。
+publish_tf: false
+tf_publish_rate: 0.0
+# 驱动把 base_frame_id 拼成 <camera_name>_link，必须与 URDF 的 d435i_link 一致。
+base_frame_id: link
+tf_prefix: ""
+initial_reset: false
+wait_for_device_timeout: 5.0
+reconnect_timeout: 5.0

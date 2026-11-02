@@ -1,146 +1,18 @@
-# ODrive CAN 总线参数
-# 接口（python-can 接口名）
-can_interface: socketcan        # socketcan / pcan / kvaser / usb2can / vector
-can_channel: can0               # SocketCAN 接口名
-can_bitrate: 250000             # 250 kbps (ODrive 默认)
-
-# 节点 ID 映射：axis(node_id) 在 CAN 总线上的 ID
-# 实际连接：两块 ODrive，每块上有两个轴 (axis0=M0, axis1=M1)
-# 推荐 ID 分配：
-#   ODrive #1 axis0 -> node_id = 0 (左前)
-#   ODrive #1 axis1 -> node_id = 1 (左后)
-#   ODrive #2 axis0 -> node_id = 2 (右前)
-#   ODrive #2 axis1 -> node_id = 3 (右后)
-node_ids:
-  - 0     # 左前
-  - 1     # 左后
-  - 2     # 右前
-  - 3     # 右后
-
-# 轮子顺序（与 /wheel_cmd.data 一致）
-# /wheel_cmd.data = [left_front, left_rear, right_front, right_rear]
-wheel_cmd_order: [0, 1, 2, 3]
-
-# 控制模式：1=VELOCITY, 2=POSITION, 3=TORQUE
-control_mode: 1                 # 速度模式
-
-# 周期性发送 Heartbeat / Set_State 触发节点进入闭环（首次上电）
-auto_enter_closed_loop: true
-auto_set_interval_sec: 1.0      # 每隔多少秒发送一次 Set_Axis_State
-
-# 速度指令的发送频率 (Hz)
-cmd_send_rate_hz: 50.0
-
-# 电流限制 (A) - 全部 4 轴共用
-current_lim: 20.0
-vel_limit: 3.5                  # turn/s (max_linear_vel / (2*pi*r) ≈ 5.58 / (2*pi*0.085) ≈ 10.45 rad/s ≈ 1.66 turn/s)
-
-# 心跳超时（s），超过则标记离线
-heartbeat_timeout_sec: 1.0
-
-# 诊断相关参数
-enable_diagnostic: true
-diagnostic_rate_hz: 1.0         # 诊断发布频率
-
-# 安全：只有所有 ODrive 都在闭环状态才接受速度指令
-require_closed_loop_for_cmd: true
-
-# ======================================================================
-# 轮速里程计参数 (wheel_odometry_node)
-# ======================================================================
-# 注意：以下参数与 diffdrive_rover 的 diffdrive_params.yaml 保持一致
-wheel_odometry:
-  wheel_radius: 0.085           # 轮子半径 (m)，6.5 寸轮
-  track_width: 0.40             # 左右轮距 (m)
-  wheel_base: 0.50              # 前后轴距 (m)
-  frame_id: odom                # odom 坐标系名称
-  child_frame_id: base_link     # 车身坐标系名称
-  publish_odom_tf: true         # 是否发布 TF
-  use_velocity_measurements: true
-  publish_rate_hz: 50.0         # 里程计发布频率
-  
-  # 协方差 (6x6 矩阵，按行展平)
-  # [x, y, z, roll, pitch, yaw]
-  pose_covariance:
-    - 0.02   # x 方向位置方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # y 方向位置方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # z 方向位置方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # roll 方向姿态方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # pitch 方向姿态方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # yaw 方向姿态方差 (最重要)
-    - 0.01
-  
-  twist_covariance:
-    - 0.01   # x 方向速度方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # y 方向速度方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # z 方向速度方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # roll 方向角速度方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # pitch 方向角速度方差
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0    # yaw 方向角速度方差 (最重要)
-    - 0.01
-
-# ======================================================================
-# ODrive 电机参数（可根据实际修改）
-# ======================================================================
-motor:
-  # 编码器每转的脉冲数（如果使用霍尔编码器）
-  encoder_counts_per_rev: 8192
-  # 电机齿轮比
-  motor_gear_ratio: 1.0
-  # 轮子每转的里程计脉冲数
-  wheel_counts_per_rev: 8192.0
-
-# ======================================================================
-# CAN 总线诊断（can_bus_test.py 脚本使用）
-# ======================================================================
-can_bus:
-  heartbeat_topic: "/odrive_diagnostic"
-  online_topic: "/odrive_online"
-  error_topic: "/odrive_error_info"
+# ODrive CAN 节点参数。轮径、轮距、方向和速度上限在
+# rover_description/config/rover_geometry.yaml，不要在这里再写一份。
+odrive_can_node:
+  ros__parameters:
+    can_interface: socketcan
+    can_channel: can0
+    can_bitrate: 250000
+    # 两块 ODrive V3.6，每块两个轴。按实车改 node id。
+    node_ids: [0, 1, 2, 3]
+    # /wheel_cmd 下标对应的 node id：左前、左后、右前、右后。
+    wheel_cmd_order: [0, 1, 2, 3]
+    # /wheel_cmd 超过这个时间没有更新就发 0 turn/s。
+    cmd_timeout_sec: 0.2
+    cmd_send_rate_hz: 50.0
+    encoder_poll_hz: 20.0
+    heartbeat_timeout_sec: 1.0
+    # MEASURE: 单轴持续电流 (A)。先用较小值，按电机铭牌再加大。
+    current_lim: 10.0

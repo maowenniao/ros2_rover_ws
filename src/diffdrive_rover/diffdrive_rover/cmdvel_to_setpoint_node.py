@@ -8,10 +8,8 @@ cmdvel_to_setpoint_node
     转换为 PX4 的 ``TrajectorySetpoint`` 并发布到 ``/fmu/in/trajectory_setpoint``，
     并根据 Offboard 模式要求周期性发布 ``OffboardControlMode``。
 
-同时：
-    - 将 /cmd_vel 解算后的左右轮速度作为 ``/wheel_cmd`` 发布（Float32MultiArray，
-      顺序 [左前, 左后, 右前, 右后] 单位 rad/s），供 ODrive CAN 桥接节点使用。
-    - 监听 /cmd_vel 失联：超过 cmdvel_timeout 自动发送零速度。
+本节点不发布 /wheel_cmd。电机由 odrive_velocity_control 直驱。
+/cmd_vel 超时后向 PX4 发零速度。默认系统启动不会加载本节点。
 
 依赖：
     px4_msgs >= 1.14
@@ -24,7 +22,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Float32MultiArray
+from rover_description.geometry import declare_geometry
 from px4_msgs.msg import (
     TrajectorySetpoint,
     OffboardControlMode,
@@ -39,11 +37,7 @@ class CmdVelToSetpointNode(Node):
         super().__init__('cmdvel_to_setpoint_node')
 
         # ============== 参数 ==============
-        self.declare_parameter('wheel_radius', 0.15)
-        self.declare_parameter('wheel_base', 0.60)
-        self.declare_parameter('track_width', 0.55)
-        self.declare_parameter('max_linear_vel', 1.5)
-        self.declare_parameter('max_angular_vel', 1.5)
+        declare_geometry(self)
         self.declare_parameter('cmdvel_timeout', 0.5)
         self.declare_parameter('setpoint_rate_hz', 20.0)
         self.declare_parameter('target_system', 1)
@@ -51,9 +45,6 @@ class CmdVelToSetpointNode(Node):
         self.declare_parameter('velocity_mode', True)
         self.declare_parameter('enable_safety_clamp', True)
 
-        self.wheel_radius = float(self.get_parameter('wheel_radius').value)
-        self.wheel_base = float(self.get_parameter('wheel_base').value)
-        self.track_width = float(self.get_parameter('track_width').value)
         self.max_linear_vel = float(self.get_parameter('max_linear_vel').value)
         self.max_angular_vel = float(self.get_parameter('max_angular_vel').value)
         self.cmdvel_timeout = float(self.get_parameter('cmdvel_timeout').value)
@@ -102,11 +93,6 @@ class CmdVelToSetpointNode(Node):
             '/fmu/in/vehicle_command',
             qos_px4,
         )
-        self.wheel_cmd_pub = self.create_publisher(
-            Float32MultiArray,
-            '/wheel_cmd',
-            10,
-        )
 
         # ============== 内部状态 ==============
         self._last_cmdvel_time = self.get_clock().now()
@@ -121,8 +107,7 @@ class CmdVelToSetpointNode(Node):
 
         self.get_logger().info(
             f'cmdvel_to_setpoint_node 已启动：'
-            f'rate={rate_hz}Hz, wheel_radius={self.wheel_radius}, '
-            f'track_width={self.track_width}, velocity_mode={self.velocity_mode}'
+            f'rate={rate_hz}Hz, velocity_mode={self.velocity_mode}（不驱动电机）'
         )
 
     # ------------------------------------------------------------------
@@ -221,21 +206,6 @@ class CmdVelToSetpointNode(Node):
         sp.yaw = self._yaw if not self.velocity_mode else float('nan')
         sp.yawspeed = self._current_wz
         self.traj_sp_pub.publish(sp)
-
-        # === 解算四轮速度并发布 /wheel_cmd ===
-        # 四轮差速：左 2 轮 = 左前/左后；右 2 轮 = 右前/右后
-        # v_L = vx - wz * track_width / 2
-        # v_R = vx + wz * track_width / 2
-        v_left = self._current_vx - self._current_wz * self.track_width / 2.0
-        v_right = self._current_vx + self._current_wz * self.track_width / 2.0
-
-        # 线速度 → 角速度（rad/s）
-        w_left = v_left / self.wheel_radius
-        w_right = v_right / self.wheel_radius
-
-        wc_msg = Float32MultiArray()
-        wc_msg.data = [w_left, w_left, w_right, w_right]
-        self.wheel_cmd_pub.publish(wc_msg)
 
     # ------------------------------------------------------------------
     # 工具

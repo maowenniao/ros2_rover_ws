@@ -17,13 +17,12 @@ import can
 
 
 CMD_HEARTBEAT = 0x01
-NODE_ID_MASK = 0x3F
-CMD_SHIFT = 6
 
 
 def parse_can_id(arb_id):
-    node_id = arb_id & NODE_ID_MASK
-    cmd = (arb_id >> CMD_SHIFT) & 0x3F
+    """ODrive 0.5.x：低 5 位是命令，高 6 位是 node id。"""
+    cmd = arb_id & 0x1F
+    node_id = (arb_id >> 5) & 0x3F
     return cmd, node_id
 
 
@@ -47,8 +46,8 @@ def main():
             cmd, nid = parse_can_id(msg.arbitration_id)
 
             if cmd == CMD_HEARTBEAT and len(msg.data) >= 8:
-                axis_state = struct.unpack('<I', msg.data[0:4])[0]
-                error_flags = struct.unpack('<I', msg.data[4:8])[0]
+                error_flags = struct.unpack('<I', msg.data[0:4])[0]
+                axis_state = msg.data[4]
                 tag = f'nid={nid}'
                 if tag not in seen:
                     print(f'发现 ODrive: {tag}')
