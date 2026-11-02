@@ -62,7 +62,9 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('enable_web', default_value='false'),
         DeclareLaunchArgument('pixhawk_device', default_value='/dev/pixhawk'),
         DeclareLaunchArgument('uxrce_baudrate', default_value='921600'),
-        DeclareLaunchArgument('d435i_serial', default_value=''),
+        DeclareLaunchArgument('d435i_serial', default_value="''"),
+        DeclareLaunchArgument('publish_odom_tf', default_value='true',
+                              description='建图或导航时应为 false，改由 EKF 发布 odom'),
         OpaqueFunction(function=_setup_can),
         ExecuteProcess(
             cmd=[
@@ -90,6 +92,9 @@ def generate_launch_description() -> LaunchDescription:
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(odrive_share, 'launch', 'odrive_can.launch.py')),
+            launch_arguments={
+                'publish_odom_tf': LaunchConfiguration('publish_odom_tf'),
+            }.items(),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(

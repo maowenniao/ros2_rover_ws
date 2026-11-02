@@ -1,62 +1,65 @@
-"""Intel RealSense D435i。分辨率在启动时拼成驱动要求的 profile 字符串。"""
+"""D435i：驱动参数来自 yaml，光学坐标系用静态 TF 接到 URDF 的 d435i_link。"""
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+# 名义外参来自 realsense2_description 的 D435/D435i xacro，不是单台标定值。
+_OPTICAL = ['--roll', '-1.5707963', '--pitch', '0', '--yaw', '-1.5707963']
 
-def _as_bool(text: str) -> bool:
-    return text.lower() in ('1', 'true', 'yes', 'on')
 
-
-def _launch(context, *args, **kwargs):
-    def arg(name):
-        return LaunchConfiguration(name).perform(context)
-
-    depth = f"{arg('depth_width')}x{arg('depth_height')}x{arg('depth_fps')}"
-    color = f"{arg('color_width')}x{arg('color_height')}x{arg('color_fps')}"
-    return [Node(
-        package='realsense2_camera',
-        executable='realsense2_camera_node',
-        name='realsense2_camera_node',
-        namespace=arg('camera_name'),
+def _static(x, y, z, parent, child, optical=False):
+    args = ['--x', str(x), '--y', str(y), '--z', str(z),
+            '--frame-id', parent, '--child-frame-id', child]
+    if optical:
+        args[6:6] = _OPTICAL
+    else:
+        args[6:6] = ['--roll', '0', '--pitch', '0', '--yaw', '0']
+    return Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name=f'tf_{child}',
         output='screen',
-        emulate_tty=True,
-        parameters=[{
-            'depth_module.depth_profile': depth,
-            'rgb_camera.color_profile': color,
-            'enable_infra1': _as_bool(arg('enable_infra1')),
-            'enable_infra2': _as_bool(arg('enable_infra2')),
-            'enable_gyro': _as_bool(arg('enable_gyro')),
-            'enable_accel': _as_bool(arg('enable_accel')),
-            'pointcloud.enable': _as_bool(arg('enable_pointcloud')),
-            'align_depth.enable': _as_bool(arg('enable_align_depth')),
-            'unite_imu_method': int(arg('unite_imu_method')),
-            'serial_no': arg('serial_no'),
-            'device_type': 'd435i',
-        }],
-    )]
+        arguments=args,
+    )
 
 
 def generate_launch_description() -> LaunchDescription:
-    names = [
-        ('depth_width', '640'),
-        ('depth_height', '480'),
-        ('depth_fps', '30'),
-        ('color_width', '640'),
-        ('color_height', '480'),
-        ('color_fps', '30'),
-        ('enable_infra1', 'true'),
-        ('enable_infra2', 'true'),
-        ('enable_gyro', 'true'),
-        ('enable_accel', 'true'),
-        ('enable_pointcloud', 'true'),
-        ('enable_align_depth', 'true'),
-        ('unite_imu_method', '1'),
-        ('serial_no', ''),
-        ('camera_name', 'd435i'),
-    ]
-    return LaunchDescription(
-        [DeclareLaunchArgument(name, default_value=value) for name, value in names]
-        + [OpaqueFunction(function=_launch)]
-    )
+    share = get_package_share_directory('d435i_launch')
+    config = os.path.join(share, 'config', 'd435i.yaml')
+    realsense_launch = os.path.join(
+        get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
+    return LaunchDescription([
+        DeclareLaunchArgument('serial_no', default_value=''),
+        DeclareLaunchArgument('camera_name', default_value='d435i'),
+        DeclareLaunchArgument('camera_namespace', default_value='d435i'),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(realsense_launch),
+            launch_arguments={
+                'camera_name': LaunchConfiguration('camera_name'),
+                'camera_namespace': LaunchConfiguration('camera_namespace'),
+                'serial_no': LaunchConfiguration('serial_no'),
+                'config_file': config,
+                'enable_color': 'true',
+                'enable_depth': 'true',
+                'enable_gyro': 'true',
+                'enable_accel': 'true',
+                'unite_imu_method': '2',
+                'align_depth.enable': 'true',
+                'pointcloud.enable': 'true',
+                'publish_tf': 'false',
+                'rgb_camera.color_profile': '640x480x15',
+                'depth_module.depth_profile': '640x480x15',
+            }.items(),
+        ),
+        _static(0, 0, 0, 'd435i_link', 'd435i_depth_frame'),
+        _static(0, 0, 0, 'd435i_depth_frame', 'd435i_depth_optical_frame', optical=True),
+        _static(0, 0.015, 0, 'd435i_link', 'd435i_color_frame'),
+        _static(0, 0, 0, 'd435i_color_frame', 'd435i_color_optical_frame', optical=True),
+        _static(-0.01174, -0.00552, 0.0051, 'd435i_link', 'd435i_imu_frame'),
+        _static(0, 0, 0, 'd435i_imu_frame', 'd435i_imu_optical_frame', optical=True),
+    ])

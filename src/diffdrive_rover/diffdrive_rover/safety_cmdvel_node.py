@@ -10,6 +10,7 @@ import math
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 
 from diffdrive_rover.safety import front_min_range, limit_twist
@@ -35,7 +36,8 @@ class SafetyCmdVelNode(Node):
         self.last_scan = None
         self.last_cmd_time = None
         self.create_subscription(Twist, 'cmd_vel_nav', self._cmd_cb, 10)
-        self.create_subscription(LaserScan, 'scan', self._scan_cb, 10)
+        # depthimage_to_laserscan 使用 sensor QoS（best effort）。可靠订阅收不到。
+        self.create_subscription(LaserScan, 'scan', self._scan_cb, qos_profile_sensor_data)
         self.pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.create_timer(0.05, self._publish)
         self.get_logger().info(
