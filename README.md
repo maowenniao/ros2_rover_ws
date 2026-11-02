@@ -57,10 +57,8 @@ sudo apt install -y ros-jazzy-desktop python3-colcon-common-extensions \
     ros-jazzy-joint-state-publisher-gui ros-jazzy-rviz2
 source /opt/ros/jazzy/setup.bash
 cd ~/ros2_rover_ws/src
-git clone https://github.com/PX4/px4_msgs.git -b release/1.14
-# px4_ros_com 没有 release/1.14 这个分支名，1.14 行是 release/v1.14。
-# 本仓库的控制链不依赖它。要对齐差速机架 50000，固件和消息请改用 PX4 1.16。
-git clone https://github.com/PX4/px4_ros_com.git -b release/v1.14
+# 差速机架 50000 从 PX4 1.16 才有。消息必须用同一代，不要再用 release/1.14。
+git clone https://github.com/PX4/px4_msgs.git -b release/1.16
 cd ~/ros2_rover_ws
 rosdep install --from-paths src --ignore-src -y --rosdistro=jazzy
 colcon build --symlink-install
@@ -140,17 +138,43 @@ ros2 run nav2_map_server map_saver_cli -f "$HOME/maps/rover_map"
 ros2 launch rover_bringup navigation.launch.py map:=$HOME/maps/rover_map.yaml
 ```
 
-导航链路是 `/cmd_vel_raw` → 速度平滑 → `/cmd_vel_nav` → 安全层 → `/cmd_vel`。速度上限从 `rover_geometry.yaml` 填进 Nav2，不会超过底盘限幅。建图和导航不要同时开：一个用 slam_toolbox，一个用 AMCL，都会发 `map → odom`。
+导航链路是 `/cmd_vel_raw` → 速度平滑 → `/cmd_vel_auto`。`rc_command_node` 在自动模式下把它转到 `/cmd_vel_nav`，手动模式下改发摇杆。安全层再写 `/cmd_vel`。速度上限从 `rover_geometry.yaml` 填进 Nav2，不会超过底盘限幅。建图和导航不要同时开：一个用 slam_toolbox，一个用 AMCL，都会发 `map → odom`。
+
+外部遥控和网页如果要经过这层仲裁，请发到 `/cmd_vel_auto`，不要再直接发 `/cmd_vel_nav`。没有拨到手动时，默认就是自动转发。
+
+## 遥控器与 Pixhawk
+
+接收机插在 Pixhawk 上，不进 Jetson。`rc_command_node` 读 `/fmu/out/manual_control_setpoint`：
+
+- `pitch` 前进，`yaw` 转向。PX4 的正 yaw 是顺时针，节点会改成 ROS 的逆时针为正。
+- `aux1` 大于 0.3 为手动，小于 -0.3 为自动，中间保持。通道名在 `src/diffdrive_rover/config/rc_params.yaml`。
+- `aux2` 大于 0.5、失控超时、PX4 failsafe、电子围栏或严重低电，发布 `/estop`。条件消失只解除急停锁存，电机要重新 `arm_rover`。
+
+姿态不再走 D435i IMU。`px4_state_node` 把 PX4 `vehicle_odometry` 里的 FRD 角速度转成 `/px4/imu`，EKF 降到 15 Hz，只融合轮速和这份航向角速度。电池、解锁和 failsafe 出现在 `/diagnostics`。
+
+不把 PX4 的差速控制器直接拿去转 ODrive。Pixhawk 的执行器输出是 -1 到 1 的油门，USB-CAN 仍在 Jetson 上，PX4 也不会说 ODrive 的 CAN 协议。再开一条执行器到轮速的桥，会和现在这条唯一的 `/wheel_cmd` 打架。若以后要卸掉 Jetson 上的 CAN，需要把飞控的 PWM/舵机口改接到 ODrive 的 PWM 输入，并接受编码器反馈不再进 ROS。那是改线，不是这次的软件改动。
+
+### 固件和 QGroundControl
+
+1. 烧录 PX4 **1.16 或更新**。机架选 Generic Rover Differential，或 `SYS_AUTOSTART = 50000`。1.14 的 50000 是阿克曼地面车，不是这条差速机架。
+2. 工作空间里的 `px4_msgs` 使用 `release/1.16`。
+3. USB 上的 XRCE 仍由 Jetson 的 Agent 连接 `/dev/pixhawk`。飞控端在 SD 卡 `etc/extras.txt` 里启动 `uxrce_dds_client start -t serial -d /dev/ttyACM0 -b 921600`（设备名以飞控上 `ls /dev/ttyACM*` 为准）。
+4. 校准遥控器。`RC_MAP_PITCH`、`RC_MAP_YAW` 指向前进和转向。`RC_MAP_AUX1` 给模式开关，`RC_MAP_AUX2` 给急停开关。`RC_MAP_KILL` 如果有急停挡，也会触发。
+5. `COM_RC_LOSS_T` 设为约 0.5 s。`NAV_RCL_ACT` 选悬停或锁桨，不要在丢失遥控后继续跑导航。围栏用 `GF_ACTION` 和水平距离限制。低电用 `BAT_LOW_THR`、`BAT_CRIT_THR` 和 `COM_LOW_BAT_ACT`。
+6. 若要减少串口上的无用高频话题，用 `src/diffdrive_rover/config/dds_topics.yaml` 替换 PX4 源码中的 `src/modules/uxrce_dds_client/dds_topics.yaml` 后重新编译。v1.16.0 不会读取 SD 卡上的同名文件。另外可以把 `IMU_GYRO_RATEMAX` 降到 200 Hz 左右，减轻 EKF2 本身的负担。
+
+估计能省下的是 Orin Nano 上大约一个核的 5% 到 15%，主要来自关掉 D435i IMU 和少做一次 30 Hz 融合。深度图和点云仍然是大头。这是估计，不是实测。自定义 DDS 话题表要重新烧录后，Agent 才少解析 `sensor_combined` 那类消息。
 
 仓库里的 `maps/rover_warehouse.pgm` 只是一张 1 米见方的空图，用来确认 map_server 能读文件。真正跑导航之前换成上面保存的地图。
 
 ### 上车核对
 
-轮子可以着地，但第一次先留出空地，旁边不要站人。
+轮子先离地做遥控和失控测试。确认方向后再着地，并留出空地。
 
-1. `ros2 launch rover_bringup mapping.launch.py enable_rviz:=true`。RViz 里 Fixed Frame 用 `map`。应能看到彩色、深度，以及 `d435i_link` 到三个 optical 帧的 TF。`ros2 run tf2_tools view_frames` 里 `odom → base_link` 只有 EKF，没有第二份。
-2. `ros2 topic hz /d435i/d435i/depth/image_rect_raw` 和 `ros2 topic hz /scan` 都有数据。`/scan` 的 frame 是 `d435i_depth_optical_frame`。
-3. 慢速遥控走一圈。RViz 的 Map 应跟着铺开。人对着相机站在 1 m 内时，发 `/cmd_vel_nav` 前进应被安全层停住；倒车指令仍应能离开障碍。
-4. `map_saver_cli` 存图后，停掉建图，用 `navigation.launch.py` 加载这张图。RViz 里粒子或激光应贴在墙上，而不是再起一份 SLAM。
-5. 在空地上用 RViz 的 Nav2 Goal 点一个近目标。车应沿路径走，速度不超过几何文件里的线速度和角速度。
-6. 把障碍放到路径上，车应在安全距离停下，而不是顶上去。确认后再试倒车离开。急停仍用 `ros2 run rover_bringup estop_rover`。
+1. `ros2 launch rover_bringup mapping.launch.py enable_rviz:=true`。Fixed Frame 用 `map`。应能看到彩色、深度，以及 `d435i_link` 到三个 optical 帧的 TF。`odom → base_link` 只有 EKF。`/diagnostics` 里有 `px4_battery` 和 `px4_vehicle`。
+2. `ros2 topic hz /d435i/d435i/depth/image_rect_raw` 和 `ros2 topic hz /scan` 有数据。`/scan` 的 frame 是 `d435i_depth_optical_frame`。不应再有 `/d435i/d435i/imu`。`ros2 topic hz /px4/imu` 有数据。
+3. 模式开关拨到手动，轻推前进摇杆，轮子朝车头慢转。拨回自动后摇杆不再驱动。此时只有 `/cmd_vel_auto` 或之后的 Nav2 能动。再拨回手动应立刻抢走控制。
+4. 关闭发射机。大约 0.5 秒内轮子停转，`/estop` 为 true，轴退出闭环。打开发射机后轮子仍不转，直到再次 `arm_rover`。
+5. 着地后慢速走一圈，地图应铺开。人站在相机前约 1 m，手动前进应被安全层停住，倒车仍能离开。
+6. `ros2 run nav2_map_server map_saver_cli -f ~/maps/rover_map`。停掉建图，用 `navigation.launch.py map:=~/maps/rover_map.yaml` 加载。激光应贴在已保存的墙上。
+7. RViz 里点一个近的 Nav2 Goal。速度不超过几何文件的上限。路径上放障碍时，车应在安全距离停下。急停仍可用 `ros2 run rover_bringup estop_rover`。

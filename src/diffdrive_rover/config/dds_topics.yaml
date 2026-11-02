@@ -1,0 +1,33 @@
+# 给 PX4 1.16 固件编译用的精简 uXRCE 话题表。
+# PX4 v1.16.0 把这份表编译进固件，不能只靠放到 SD 卡生效。
+# 替换 PX4 源码里的 src/modules/uxrce_dds_client/dds_topics.yaml 后重新编译烧录。
+# 去掉了 sensor_combined、GPS、全球位置、空速和 VTOL 等高频或用不到的话题。
+# 角速度从 vehicle_odometry 里取，不再单独发布 vehicle_angular_velocity。
+#####
+publications:
+  - topic: /fmu/out/battery_status
+    type: px4_msgs::msg::BatteryStatus
+  - topic: /fmu/out/failsafe_flags
+    type: px4_msgs::msg::FailsafeFlags
+  - topic: /fmu/out/manual_control_setpoint
+    type: px4_msgs::msg::ManualControlSetpoint
+  - topic: /fmu/out/manual_control_switches
+    type: px4_msgs::msg::ManualControlSwitches
+  - topic: /fmu/out/input_rc
+    type: px4_msgs::msg::InputRc
+  - topic: /fmu/out/geofence_status
+    type: px4_msgs::msg::GeofenceStatus
+  - topic: /fmu/out/vehicle_odometry
+    type: px4_msgs::msg::VehicleOdometry
+  - topic: /fmu/out/vehicle_status
+    type: px4_msgs::msg::VehicleStatus
+  - topic: /fmu/out/vehicle_command_ack
+    type: px4_msgs::msg::VehicleCommandAck
+
+subscriptions:
+  - topic: /fmu/in/vehicle_command
+    type: px4_msgs::msg::VehicleCommand
+  - topic: /fmu/in/offboard_control_mode
+    type: px4_msgs::msg::OffboardControlMode
+  - topic: /fmu/in/trajectory_setpoint
+    type: px4_msgs::msg::TrajectorySetpoint

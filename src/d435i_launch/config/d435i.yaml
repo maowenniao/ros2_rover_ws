@@ -6,9 +6,10 @@ enable_depth: true
 depth_module.depth_profile: 640x480x15
 enable_infra1: false
 enable_infra2: false
-enable_gyro: true
-enable_accel: true
-unite_imu_method: 2
+# 姿态和航向角速度改由 Pixhawk EKF2 提供，相机不再出 IMU。
+enable_gyro: false
+enable_accel: false
+unite_imu_method: 0
 enable_sync: true
 align_depth.enable: true
 pointcloud.enable: true

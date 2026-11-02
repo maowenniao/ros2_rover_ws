@@ -29,4 +29,5 @@ def generate_launch_description():
         include('rover_mapping', 'depth_to_scan.launch.py'),
         include('rover_localization', 'localization.launch.py'),
         include('rover_mapping', 'mapping.launch.py'),
+        include('diffdrive_rover', 'rc_command.launch.py'),
     ])

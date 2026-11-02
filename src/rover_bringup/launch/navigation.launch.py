@@ -35,4 +35,5 @@ def generate_launch_description():
         include('rover_navigation', 'navigation.launch.py', {
             'map': LaunchConfiguration('map'),
         }.items()),
+        include('diffdrive_rover', 'rc_command.launch.py'),
     ])

@@ -29,6 +29,8 @@ setup(
             'cmdvel_to_setpoint_node = diffdrive_rover.cmdvel_to_setpoint_node:main',
             'odometry_bridge_node = diffdrive_rover.odometry_bridge_node:main',
             'safety_cmdvel_node = diffdrive_rover.safety_cmdvel_node:main',
+            'rc_command_node = diffdrive_rover.rc_command_node:main',
+            'px4_state_node = diffdrive_rover.px4_state_node:main',
         ],
     },
 )
