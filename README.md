@@ -7,7 +7,8 @@ Ubuntu 24.04 + ROS 2 Jazzy。电机由 Jetson 做差速解算后直接走 CAN，
 ## 控制链
 
 ```
-/cmd_vel_nav ──可选 safety_cmdvel_node──► /cmd_vel
+/cmd_vel_nav ── safety_cmdvel_node ──► /cmd_vel
+导航时 Nav2 经速度平滑写到 /cmd_vel_nav。只开底盘时可以直接发 /cmd_vel。
                                             │
                                             ▼
                               odrive_velocity_control   ← 唯一的 /wheel_cmd 发布者
@@ -16,10 +17,8 @@ Ubuntu 24.04 + ROS 2 Jazzy。电机由 Jetson 做差速解算后直接走 CAN，
                               odrive_can_node ──CAN──► ODrive
                                             │
                                             ▼
-                              /wheel_state ──► wheel_odometry ──► /wheel_odom
-                                            │                    odom → base_link
-                                            ▼
-                              joint_state_bridge ──► /joint_states
+                              /wheel_state ──► /wheel_odom ──► EKF + D435i IMU ──► /odom
+建图和导航时 EKF 是 odom → base_link 的唯一发布者。单独开底盘时轮速里程计自己发这份 TF。
 ```
 
 `/odrive_enable` 为 true 之前，驱动不会进入闭环。`/wheel_cmd` 超过 0.2 s 没有更新时，CAN 节点改发 0，避免 ODrive 锁存上一次速度。
@@ -41,7 +40,11 @@ PX4 的 `TrajectorySetpoint` 节点还在 `diffdrive_rover` 里，但总启动�
 | `diffdrive_rover` | 可选的速度安全层；可选的 PX4 设定点（不驱动轮子） |
 | `rover_bringup` | `full_system`、解锁、急停 |
 | `d435i_launch` | RealSense 启动 |
-| `rover_localization` / `rover_mapping` / `rover_navigation` / `rover_mission` | 后续定位和导航的草稿，这条控制链不用它们 |
+| `d435i_launch` | D435i 驱动参数和光学坐标系静态 TF |
+| `rover_localization` | EKF，发布 `/odom` 与 `odom → base_link` |
+| `rover_mapping` | 深度转 `/scan`，slam_toolbox 发布 `map → odom` |
+| `rover_navigation` | Nav2 + AMCL。导航时不要再开 SLAM |
+| `rover_mission` | 航点动作客户端 |
 
 几何只改这一份：`src/rover_description/config/rover_geometry.yaml`。带 `MEASURE` 的是占位值。车体 yaw 上限是 `max_angular_vel`（rad/s），不要把轮子角速度填进去。
 
@@ -105,4 +108,49 @@ ros2 run rover_bringup estop_rover
 7. 确认松手或杀掉 `topic pub` 后 0.5 s 内轮子停下，`estop_rover` 后轴退出闭环且 PX4 上锁。
 8. 轮子着地前把 `current_lim` 和 `max_wheel_speed` 改成电机铭牌允许的值。建议在 ODrive 上把 `axis.config.watchdog_timeout` 设成大约 0.5 s，这样 CAN 节点崩溃时驱动器自己退出闭环。
 
-不要同时跑旧的 `cmdvel_to_setpoint` 来驱动轮子。Nav2、EKF、`ros2_control` 还没接到这条链上。
+不要同时跑旧的 `cmdvel_to_setpoint` 来驱动轮子。`ros2_control` 还没接上。
+
+## 相机、定位和导航
+
+D435i 话题在 `/d435i/d435i/` 下（命名空间和相机名都是 `d435i`）：
+
+| 话题 | 用途 |
+|---|---|
+| `/d435i/d435i/color/image_raw` | 彩色 |
+| `/d435i/d435i/depth/image_rect_raw` | 深度，转成 `/scan` |
+| `/d435i/d435i/aligned_depth_to_color/image_raw` | 对齐到彩色的深度 |
+| `/d435i/d435i/depth/color/points` | 局部代价地图的点云 |
+| `/d435i/d435i/imu` | `sensor_msgs/Imu`，进 EKF |
+
+光学坐标系由静态 TF 从 URDF 的 `d435i_link` 接到 `d435i_depth_optical_frame`、`d435i_color_optical_frame` 和 `d435i_imu_optical_frame`。驱动自己的 TF 关掉了，避免两份外参。这些是手册上的名义值，不是这台相机的标定。
+
+`/scan` 的 `frame_id` 是 `d435i_depth_optical_frame`。深度图转扫描的射线就在这个光学帧里，不能改成 `base_link`。
+
+```bash
+# 建图：EKF 发 odom，slam_toolbox 发 map。没有 AMCL。
+ros2 launch rover_bringup mapping.launch.py
+
+# 边开边看。遥控发到 /cmd_vel_nav，安全层才会看 /scan。
+ros2 topic pub /cmd_vel_nav geometry_msgs/msg/Twist "{linear: {x: 0.2}}" -r 10
+
+# 保存地图。会生成 pgm 和 yaml。
+ros2 run nav2_map_server map_saver_cli -f "$HOME/maps/rover_map"
+
+# 把这两个文件放到 src/rover_navigation/maps/，或启动时指定 map:=。
+ros2 launch rover_bringup navigation.launch.py map:=$HOME/maps/rover_map.yaml
+```
+
+导航链路是 `/cmd_vel_raw` → 速度平滑 → `/cmd_vel_nav` → 安全层 → `/cmd_vel`。速度上限从 `rover_geometry.yaml` 填进 Nav2，不会超过底盘限幅。建图和导航不要同时开：一个用 slam_toolbox，一个用 AMCL，都会发 `map → odom`。
+
+仓库里的 `maps/rover_warehouse.pgm` 只是一张 1 米见方的空图，用来确认 map_server 能读文件。真正跑导航之前换成上面保存的地图。
+
+### 上车核对
+
+轮子可以着地，但第一次先留出空地，旁边不要站人。
+
+1. `ros2 launch rover_bringup mapping.launch.py enable_rviz:=true`。RViz 里 Fixed Frame 用 `map`。应能看到彩色、深度，以及 `d435i_link` 到三个 optical 帧的 TF。`ros2 run tf2_tools view_frames` 里 `odom → base_link` 只有 EKF，没有第二份。
+2. `ros2 topic hz /d435i/d435i/depth/image_rect_raw` 和 `ros2 topic hz /scan` 都有数据。`/scan` 的 frame 是 `d435i_depth_optical_frame`。
+3. 慢速遥控走一圈。RViz 的 Map 应跟着铺开。人对着相机站在 1 m 内时，发 `/cmd_vel_nav` 前进应被安全层停住；倒车指令仍应能离开障碍。
+4. `map_saver_cli` 存图后，停掉建图，用 `navigation.launch.py` 加载这张图。RViz 里粒子或激光应贴在墙上，而不是再起一份 SLAM。
+5. 在空地上用 RViz 的 Nav2 Goal 点一个近目标。车应沿路径走，速度不超过几何文件里的线速度和角速度。
+6. 把障碍放到路径上，车应在安全距离停下，而不是顶上去。确认后再试倒车离开。急停仍用 `ros2 run rover_bringup estop_rover`。
