@@ -5,6 +5,14 @@ import re
 from typing import Dict
 
 
+def limit_geometry(geometry: Dict, max_linear: float, max_angular: float) -> Dict:
+    """户外速度上限。不会超过底盘几何文件里的值。"""
+    limited = dict(geometry)
+    limited['max_linear_vel'] = min(abs(float(max_linear)), abs(float(geometry['max_linear_vel'])))
+    limited['max_angular_vel'] = min(abs(float(max_angular)), abs(float(geometry['max_angular_vel'])))
+    return limited
+
+
 def footprint_polygon(geometry: Dict, margin: float = 0.05) -> str:
     half_length = float(geometry['wheel_base']) / 2.0 + margin
     half_width = float(geometry['track_width']) / 2.0 + margin

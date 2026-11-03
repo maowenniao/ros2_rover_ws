@@ -25,4 +25,9 @@ setup(
     maintainer='maowenniao',
     maintainer_email='maowenniao@163.com',
     license='MIT',
+    entry_points={
+        'console_scripts': [
+            'gps_waypoint_node = rover_navigation.gps_waypoint_node:main',
+        ],
+    },
 )

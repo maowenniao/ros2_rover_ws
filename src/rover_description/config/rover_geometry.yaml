@@ -18,3 +18,7 @@
     # 车体指令限幅。应不大于轮速上限能实现的速度。
     max_linear_vel: 1.2
     max_angular_vel: 1.2
+    # MEASURE: GPS 天线相对 base_link 的位置 (m)，前、左、上。Pixhawk 上的模块，不是 Jetson。
+    gps_x: 0.0
+    gps_y: 0.0
+    gps_z: 0.15

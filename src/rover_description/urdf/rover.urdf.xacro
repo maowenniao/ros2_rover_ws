@@ -11,6 +11,7 @@
     body_height   - 车体高度 (m)
     track_width   - 左右轮距 (m)
     wheel_base    - 前后轴距 (m)
+    gps_x/y/z     - GPS 天线相对 base_link 的位置 (m)，前、左、上
     body_mass     - 车体质量 (kg)
     wheel_mass    - 轮子质量 (kg)
 -->
@@ -23,6 +24,9 @@
   <xacro:arg name="body_height" default="0.20" />
   <xacro:arg name="track_width" default="0.40" />
   <xacro:arg name="wheel_base" default="0.50" />
+  <xacro:arg name="gps_x" default="0.0" />
+  <xacro:arg name="gps_y" default="0.0" />
+  <xacro:arg name="gps_z" default="0.15" />
   <xacro:property name="wheel_radius" value="$(arg wheel_radius)" />
   <xacro:property name="wheel_width" value="$(arg wheel_width)" />
   <xacro:property name="body_length" value="$(arg body_length)" />
@@ -120,6 +124,30 @@
     <parent link="sensor_mount" />
     <child link="d435i_link" />
     <origin xyz="0.025 0 0.02" rpy="0 0 0" />
+  </joint>
+
+  <!-- GPS 天线。位置由 rover_geometry.yaml 传入，Pixhawk 上的模块。 -->
+  <link name="gps_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.05" />
+      <inertia ixx="0.00001" iyy="0.00001" izz="0.00001" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.04 0.04 0.015" />
+      </geometry>
+      <material name="gps_mat">
+        <color rgba="0.1 0.55 0.25 1.0" />
+      </material>
+    </visual>
+  </link>
+
+  <joint name="gps_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="gps_link" />
+    <origin xyz="$(arg gps_x) $(arg gps_y) $(arg gps_z)" rpy="0 0 0" />
   </joint>
 
   <!-- ============== 4 个轮子宏 ============== -->

@@ -150,7 +150,7 @@ ros2 launch rover_bringup navigation.launch.py map:=$HOME/maps/rover_map.yaml
 - `aux1` 大于 0.3 为手动，小于 -0.3 为自动，中间保持。通道名在 `src/diffdrive_rover/config/rc_params.yaml`。
 - `aux2` 大于 0.5、失控超时、PX4 failsafe、电子围栏或严重低电，发布 `/estop`。条件消失只解除急停锁存，电机要重新 `arm_rover`。
 
-姿态不再走 D435i IMU。`px4_state_node` 把 PX4 `vehicle_odometry` 里的 FRD 角速度转成 `/px4/imu`，EKF 降到 15 Hz，只融合轮速和这份航向角速度。电池、解锁和 failsafe 出现在 `/diagnostics`。
+姿态不再走 D435i IMU。`px4_state_node` 把 PX4 `vehicle_odometry` 里的 FRD 角速度转成 `/px4/imu`。有有效航向时，这份 IMU 也带上转到 ROS 东-北-天的姿态。室内 EKF 仍然只融合轮速和航向角速度，不用绝对航向。电池、解锁、failsafe 和 GPS 定位质量出现在 `/diagnostics`。Pixhawk 上的 GPS 有定位时发布 `/gps/fix`，没有定位就不发，室内不会因此等待。
 
 不把 PX4 的差速控制器直接拿去转 ODrive。Pixhawk 的执行器输出是 -1 到 1 的油门，USB-CAN 仍在 Jetson 上，PX4 也不会说 ODrive 的 CAN 协议。再开一条执行器到轮速的桥，会和现在这条唯一的 `/wheel_cmd` 打架。若以后要卸掉 Jetson 上的 CAN，需要把飞控的 PWM/舵机口改接到 ODrive 的 PWM 输入，并接受编码器反馈不再进 ROS。那是改线，不是这次的软件改动。
 
@@ -178,3 +178,27 @@ ros2 launch rover_bringup navigation.launch.py map:=$HOME/maps/rover_map.yaml
 5. 着地后慢速走一圈，地图应铺开。人站在相机前约 1 m，手动前进应被安全层停住，倒车仍能离开。
 6. `ros2 run nav2_map_server map_saver_cli -f ~/maps/rover_map`。停掉建图，用 `navigation.launch.py map:=~/maps/rover_map.yaml` 加载。激光应贴在已保存的墙上。
 7. RViz 里点一个近的 Nav2 Goal。速度不超过几何文件的上限。路径上放障碍时，车应在安全距离停下。急停仍可用 `ros2 run rover_bringup estop_rover`。
+
+## 户外 GPS
+
+GPS 模块插在 Pixhawk 上，Jetson 不再接第二台接收机。`/gps/fix` 的 `frame_id` 是 `gps_link`，天线位置只改 `rover_geometry.yaml` 里的 `gps_x/y/z`。
+
+室内的 `mapping.launch.py` 和 `navigation.launch.py` 不启动 navsat，也不会等 GPS。户外用：
+
+```bash
+ros2 launch rover_bringup outdoor_navigation.launch.py
+```
+
+这条启动用两套 EKF：本地的还是轮速加航向角速度，地图那套融合 `/odometry/gps`。航向用 `/px4/imu` 里已经转到东-北-天的飞控姿态。Nav2 不再开 AMCL。
+
+经纬度航点写在 `src/rover_navigation/config/gps_waypoints.yaml`。确认 `/gps/fix` 之后：
+
+```bash
+ros2 topic pub --once /gps_waypoints/start std_msgs/msg/Bool "{data: true}"
+```
+
+或者一开始就加 `follow_gps:=true`。默认巡航速度大约 0.3 m/s。遥控器拨到手动可以抢走控制。
+
+QGC 里把 GPS 接到 GPS1（`GPS_1_CONFIG`），`EKF2_GPS_CTRL` 常用 7（水平位置、高度、速度）。先做磁力计校准。`dds_topics.yaml` 加了 GPS 话题，要重新编译烧录，只拷到 SD 卡不会生效。
+
+单点 GPS 大约一两米。RTK 需要基站或 NTRIP，并把 RTCM 送进飞控；没有 RTK 时把航点拉开。

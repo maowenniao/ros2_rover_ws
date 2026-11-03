@@ -24,3 +24,7 @@ px4_state_node:
     publish_hz: 30.0
     # 诊断里电池剩余低于该比例记为警告。急停阈值用 PX4 的 battery warning 等级。
     battery_warn_remaining: 0.20
+    # /gps/fix 的 frame_id。天线相对 base_link 的位置在 rover_geometry.yaml。
+    gps_frame: gps_link
+    # 超过这么多秒没有新的 GPS 报文，诊断标成过期。没有 GPS 时室内不会因此等待。
+    gps_stale_sec: 2.0
