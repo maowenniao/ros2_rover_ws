@@ -3,7 +3,7 @@
 <package format="3">
   <name>rover_localization</name>
   <version>0.1.0</version>
-  <description>轮速里程计与 D435i IMU 的 EKF，发布 /odom 和唯一的 odom 到 base_link。</description>
+  <description>轮速与 PX4 角速度的本地 EKF。户外另有地图 EKF 和 navsat，室内启动不会加载。</description>
   <maintainer email="maowenniao@163.com">maowenniao</maintainer>
   <license>MIT</license>
   <exec_depend>robot_localization</exec_depend>

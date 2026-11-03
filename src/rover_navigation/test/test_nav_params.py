@@ -4,7 +4,7 @@ from pathlib import Path
 import yaml
 
 from rover_description.geometry import load_geometry
-from rover_navigation.footprint import materialize_nav_params, velocity_tokens
+from rover_navigation.footprint import limit_geometry, materialize_nav_params, velocity_tokens
 
 
 def test_materialized_limits_stay_inside_chassis():
@@ -32,6 +32,32 @@ def test_materialized_limits_stay_inside_chassis():
     assert 'navigate_w_recovery.xml' not in bt
     cloud = data['local_costmap']['local_costmap']['ros__parameters']['voxel_layer']['cloud']['topic']
     assert cloud == '/d435i/d435i/depth/color/points'
+
+
+def test_outdoor_nav_is_slow_and_does_not_use_amcl():
+    root = Path(__file__).resolve().parents[1]
+    geometry = load_geometry(str(root.parents[0] / 'rover_description' / 'config' / 'rover_geometry.yaml'))
+    capped = limit_geometry(geometry, 0.30, 0.50)
+    template = (root / 'config' / 'nav2_outdoor_params.yaml').read_text(encoding='utf-8')
+    rendered = materialize_nav_params(template, capped)
+    data = yaml.safe_load(rendered)
+    assert 'amcl' not in data
+    assert 'map_server' not in data
+    global_costmap = data['global_costmap']['global_costmap']['ros__parameters']
+    assert global_costmap['rolling_window'] is True
+    assert 'static_layer' not in global_costmap['plugins']
+    assert data['planner_server']['ros__parameters']['GridBased']['allow_unknown'] is True
+    tokens = velocity_tokens(capped)
+    assert float(tokens['DESIRED_VX']) <= 0.30
+    assert float(tokens['MAX_VX']) <= min(0.30, geometry['max_linear_vel'])
+    smoother = data['velocity_smoother']['ros__parameters']
+    assert smoother['max_velocity'][0] <= geometry['max_linear_vel']
+    assert smoother['max_velocity'][0] <= 0.30
+    launch = (root / 'launch' / 'outdoor_navigation.launch.py').read_text(encoding='utf-8')
+    assert 'map_server' not in launch
+    assert 'amcl' not in launch
+    assert 'follow_gps' in launch
+    assert '/cmd_vel_auto' in launch
 
 
 def test_navigation_launch_remaps_into_safety_layer():

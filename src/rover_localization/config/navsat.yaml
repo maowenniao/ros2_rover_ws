@@ -1,0 +1,17 @@
+# 把 /gps/fix 和 /px4/imu 的航向变成地图系的 /odometry/gps。
+# 航向已经是 ENU（0 朝东，逆时针为正），所以 yaw_offset 保持 0。
+# 飞控若已修正磁偏角，magnetic_declination_radians 也保持 0。
+# 这个节点只在户外启动里出现。它会自己等几秒凑齐第一条定位，室内启动不会等它。
+navsat_transform:
+  ros__parameters:
+    frequency: 10.0
+    delay: 3.0
+    magnetic_declination_radians: 0.0
+    yaw_offset: 0.0
+    zero_altitude: true
+    broadcast_cartesian_transform: false
+    publish_filtered_gps: true
+    use_odometry_yaw: false
+    wait_for_datum: false
+    use_local_cartesian: false
+    transform_timeout: 0.2

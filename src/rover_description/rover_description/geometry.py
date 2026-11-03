@@ -14,6 +14,9 @@ REQUIRED_KEYS = (
     'max_wheel_speed',
     'max_linear_vel',
     'max_angular_vel',
+    'gps_x',
+    'gps_y',
+    'gps_z',
 )
 
 
@@ -31,6 +34,9 @@ def declare_geometry(node) -> None:
     node.declare_parameter('max_wheel_speed', 20.0)
     node.declare_parameter('max_linear_vel', 1.2)
     node.declare_parameter('max_angular_vel', 1.2)
+    node.declare_parameter('gps_x', 0.0)
+    node.declare_parameter('gps_y', 0.0)
+    node.declare_parameter('gps_z', 0.15)
 
 
 def load_geometry(path: Optional[str] = None) -> Dict:

@@ -1,8 +1,9 @@
 # 给 PX4 1.16 固件编译用的精简 uXRCE 话题表。
 # PX4 v1.16.0 把这份表编译进固件，不能只靠放到 SD 卡生效。
 # 替换 PX4 源码里的 src/modules/uxrce_dds_client/dds_topics.yaml 后重新编译烧录。
-# 去掉了 sensor_combined、GPS、全球位置、空速和 VTOL 等高频或用不到的话题。
+# 去掉了 sensor_combined、EKF 全球位置、空速和 VTOL 等高频或用不到的话题。
 # 角速度从 vehicle_odometry 里取，不再单独发布 vehicle_angular_velocity。
+# GPS 只留接收机原始点，大约 5 Hz。不发布 vehicle_global_position，避免和户外 EKF 重复融合。
 #####
 publications:
   - topic: /fmu/out/battery_status
@@ -19,6 +20,12 @@ publications:
     type: px4_msgs::msg::GeofenceStatus
   - topic: /fmu/out/vehicle_odometry
     type: px4_msgs::msg::VehicleOdometry
+  # 1.16 的 DDS 名是 vehicle_gps_position，消息类型是 SensorGps（uORB 里也叫 sensor_gps）。
+  # rate_limit 单位是 Hz。v1.16.0 的生成脚本还不读这个字段，接收机本身大约 5–10 Hz；
+  # 更新的固件会按 5 Hz 限速。
+  - topic: /fmu/out/vehicle_gps_position
+    type: px4_msgs::msg::SensorGps
+    rate_limit: 5.
   - topic: /fmu/out/vehicle_status
     type: px4_msgs::msg::VehicleStatus
   - topic: /fmu/out/vehicle_command_ack
@@ -31,3 +38,6 @@ subscriptions:
     type: px4_msgs::msg::OffboardControlMode
   - topic: /fmu/in/trajectory_setpoint
     type: px4_msgs::msg::TrajectorySetpoint
+
+# 1.16 的生成脚本要求有这个键。这里没有多实例订阅。
+subscriptions_multi:

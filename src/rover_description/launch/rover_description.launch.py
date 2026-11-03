@@ -21,6 +21,9 @@ def generate_launch_description() -> LaunchDescription:
         ' wheel_base:=', str(geometry['wheel_base']),
         ' body_length:=', str(geometry['wheel_base']),
         ' body_width:=', str(geometry['track_width']),
+        ' gps_x:=', str(geometry['gps_x']),
+        ' gps_y:=', str(geometry['gps_y']),
+        ' gps_z:=', str(geometry['gps_z']),
     ])
     return LaunchDescription([
         DeclareLaunchArgument('use_gui', default_value='false'),
