@@ -32,6 +32,8 @@ setup(
             'odrive_velocity_control = odrive_can_bridge.odrive_velocity_control_node:main',
             'can_bus_test = odrive_can_bridge.can_bus_test:main',
             'web_controller = odrive_can_bridge.web_controller:main',
+            'odrive_torque_diag = odrive_can_bridge.torque_diag:main',
+            'odrive_quad_torque_diag = odrive_can_bridge.quad_torque_diag:main',
         ],
     },
 )
