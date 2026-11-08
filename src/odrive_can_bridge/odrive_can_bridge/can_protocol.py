@@ -32,6 +32,8 @@ CMD_CLEAR_ERRORS = 0x18
 AXIS_STATE_IDLE = 1
 AXIS_STATE_CLOSED_LOOP = 8
 
+CONTROL_MODE_VOLTAGE = 0
+CONTROL_MODE_TORQUE = 1
 CONTROL_MODE_VELOCITY = 2
 CONTROL_MODE_POSITION = 3
 INPUT_MODE_PASSTHROUGH = 1
@@ -64,6 +66,11 @@ def turns_to_rad(turns: float) -> float:
 def encode_set_input_vel(node_id: int, turns_per_s: float, torque_ff: float = 0.0) -> Tuple[int, bytes]:
     """cmd 0x0D：float32 速度 (turn/s) + float32 力矩前馈。"""
     return make_can_id(node_id, CMD_SET_INPUT_VEL), struct.pack('<ff', float(turns_per_s), float(torque_ff))
+
+
+def encode_set_input_torque(node_id: int, torque_nm: float) -> Tuple[int, bytes]:
+    """cmd 0x0E：float32 力矩 (N·m)。"""
+    return make_can_id(node_id, CMD_SET_INPUT_TORQUE), struct.pack('<f', float(torque_nm))
 
 
 def encode_set_axis_state(node_id: int, state: int) -> Tuple[int, bytes]:
@@ -140,6 +147,14 @@ def decode_bus_voltage_current(data: bytes) -> Tuple[float, float]:
         raise ValueError(f'bus voltage 需要 8 字节，收到 {len(data)}')
     voltage, current = struct.unpack_from('<ff', data)
     return float(voltage), float(current)
+
+
+def decode_iq(data: bytes) -> Tuple[float, float]:
+    """cmd 0x14 的广播：Iq 设定值、Iq 测量值 (A)。"""
+    if len(data) < 8:
+        raise ValueError(f'Iq 需要 8 字节，收到 {len(data)}')
+    setpoint, measured = struct.unpack_from('<ff', data)
+    return float(setpoint), float(measured)
 
 
 def select_velocity_command(
